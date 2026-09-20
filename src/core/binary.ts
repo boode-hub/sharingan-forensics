@@ -68,12 +68,11 @@ export function ascii(b: Uint8Array): string {
 export class Cursor {
   pos = 0;
   overran = false;
+  readonly buf: Uint8Array;
   private dv: DataView;
 
-  constructor(
-    readonly buf: Uint8Array,
-    start = 0,
-  ) {
+  constructor(buf: Uint8Array, start = 0) {
+    this.buf = buf;
     this.pos = start;
     this.dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
   }

@@ -1,0 +1,72 @@
+{
+  "v1.$I": [
+    {
+      "version": 1,
+      "originalPath": "C:\\Users\\suspect\\Documents\\notes.txt",
+      "fileName": "notes.txt",
+      "fileSize": 1024,
+      "deletedOn": "2019-06-01T10:30:00.000Z",
+      "recordIndex": null,
+      "driveLetter": null,
+      "offset": 0
+    }
+  ],
+  "v2.$I": [
+    {
+      "version": 2,
+      "originalPath": "D:\\Evidence\\big file with spaces.vhdx",
+      "fileName": "big file with spaces.vhdx",
+      "fileSize": 4294967296,
+      "deletedOn": "2021-11-15T23:59:59.000Z",
+      "recordIndex": null,
+      "driveLetter": null,
+      "offset": 0
+    }
+  ],
+  "v2-unicode.$I": [
+    {
+      "version": 2,
+      "originalPath": "C:\\Users\\مستخدم\\文件.docx",
+      "fileName": "文件.docx",
+      "fileSize": 0,
+      "deletedOn": "2024-02-29T12:00:00.000Z",
+      "recordIndex": null,
+      "driveLetter": null,
+      "offset": 0
+    }
+  ],
+  "INFO2": [
+    {
+      "version": 5,
+      "originalPath": "C:\\WINDOWS\\Temp\\old.log",
+      "fileName": "old.log",
+      "fileSize": 512,
+      "deletedOn": "2003-04-05T06:07:08.000Z",
+      "recordIndex": 0,
+      "driveLetter": "C:",
+      "offset": 16
+    },
+    {
+      "version": 5,
+      "originalPath": "C:\\Docs\\report.doc",
+      "fileName": "report.doc",
+      "fileSize": 65536,
+      "deletedOn": "2004-12-25T00:00:01.000Z",
+      "recordIndex": 1,
+      "driveLetter": "C:",
+      "offset": 816
+    }
+  ],
+  "renamed-v2.bin": [
+    {
+      "version": 2,
+      "originalPath": "D:\\Evidence\\big file with spaces.vhdx",
+      "fileName": "big file with spaces.vhdx",
+      "fileSize": 4294967296,
+      "deletedOn": "2021-11-15T23:59:59.000Z",
+      "recordIndex": null,
+      "driveLetter": null,
+      "offset": 0
+    }
+  ]
+}

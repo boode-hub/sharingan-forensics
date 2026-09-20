@@ -1,122 +1,205 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { Row } from './core/types';
+import { Grid } from './ui/Grid';
+import { bytes, download, fmt, toCsv, toJson } from './ui/format';
+import type { WorkRequest, WorkResult } from './worker';
 
-function App() {
-  const [count, setCount] = useState(0)
+let nextId = 1;
+
+export default function App() {
+  const [results, setResults] = useState<WorkResult[]>([]);
+  const [sel, setSel] = useState<number | null>(null);
+  const [row, setRow] = useState<Row | null>(null);
+  const [filter, setFilter] = useState('');
+  const [busy, setBusy] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const worker = useRef<Worker>(null);
+
+  useEffect(() => {
+    const w = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
+    w.onmessage = (e: MessageEvent<WorkResult>) => {
+      setResults((rs) => [...rs, e.data]);
+      setBusy((n) => n - 1);
+      setSel((s) => s ?? e.data.id);
+    };
+    worker.current = w;
+    return () => w.terminate();
+  }, []);
+
+  const ingest = useCallback((files: FileList | File[]) => {
+    for (const file of files) {
+      setBusy((n) => n + 1);
+      worker.current?.postMessage({ id: nextId++, file } satisfies WorkRequest);
+    }
+  }, []);
+
+  const current = results.find((r) => r.id === sel);
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div
+      className={`app${dragging ? ' dragging' : ''}`}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragging(false);
+        if (e.dataTransfer.files.length) ingest(e.dataTransfer.files);
+      }}
+    >
+      <header>
+        <h1>
+          Sharingan <span>Forensics</span>
+        </h1>
+        <p className="privacy">
+          Every byte is parsed in this tab. Nothing is uploaded, and there is no server to upload
+          to.
+        </p>
+      </header>
 
-      <div className="ticks"></div>
+      <div className="body">
+        <aside>
+          <label className="pick">
+            <input
+              type="file"
+              multiple
+              onChange={(e) => {
+                if (e.target.files?.length) ingest(e.target.files);
+                e.target.value = '';
+              }}
+            />
+            Open artifacts…
+          </label>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
+          {busy > 0 && (
+            <p className="busy">
+              Parsing {busy} file{busy > 1 ? 's' : ''}…
+            </p>
+          )}
+
+          <ul className="files">
+            {results.map((r) => (
+              <li key={r.id}>
+                <button
+                  type="button"
+                  className={r.id === sel ? 'on' : ''}
+                  onClick={() => {
+                    setSel(r.id);
+                    setRow(null);
+                    setFilter('');
+                  }}
+                >
+                  <span className="fn">{r.fileName}</span>
+                  <span className="meta">
+                    {r.error ? (
+                      <em>unrecognised</em>
+                    ) : (
+                      <>
+                        {r.parser?.ezTool} · {r.rows?.length.toLocaleString()} rows
+                      </>
+                    )}
+                  </span>
+                </button>
+              </li>
+            ))}
           </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+          {results.length === 0 && (
+            <p className="hint">
+              Drop a <code>$I</code>, <code>.pf</code>, <code>.lnk</code> or <code>.evtx</code> file
+              anywhere on this page.
+            </p>
+          )}
+        </aside>
+
+        <main>
+          {!current && <div className="empty">No artifact selected.</div>}
+
+          {current?.error && (
+            <div className="empty error">
+              <strong>{current.fileName}</strong>
+              <p>{current.error}</p>
+            </div>
+          )}
+
+          {current?.parser && current.rows && (
+            <>
+              <div className="toolbar">
+                <input
+                  className="filter"
+                  placeholder="Filter rows…"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                />
+                <span className="spacer" />
+                <span className="stat">
+                  {current.parser.name} · {bytes(current.fileSize)} · {current.ms} ms
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    download(
+                      `${current.fileName}.csv`,
+                      toCsv(current.parser!.columns, current.rows!),
+                      'text/csv',
+                    )
+                  }
+                >
+                  CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    download(`${current.fileName}.json`, toJson(current.rows!), 'application/json')
+                  }
+                >
+                  JSON
+                </button>
+              </div>
+
+              {!!current.warnings?.length && (
+                <details className="warnings">
+                  <summary>
+                    {current.warnings.length} warning{current.warnings.length > 1 ? 's' : ''} — the
+                    rows below are what could be recovered
+                  </summary>
+                  <ul>
+                    {current.warnings.map((w, i) => (
+                      <li key={i}>
+                        <code>0x{w.offset.toString(16)}</code> {w.message}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+
+              <Grid
+                columns={current.parser.columns}
+                rows={current.rows}
+                filter={filter}
+                onSelect={setRow}
+              />
+
+              {row && (
+                <div className="detail">
+                  <table>
+                    <tbody>
+                      {current.parser.columns.map((c) => (
+                        <tr key={c.key}>
+                          <th>{c.label}</th>
+                          <td>{fmt(row[c.key])}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </main>
+      </div>
+    </div>
+  );
 }
-
-export default App

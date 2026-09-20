@@ -25,6 +25,7 @@ produce them.
 | `recyclebin/` | `make.mjs` | [libyal dtformats — Windows Recycle Bin](https://github.com/libyal/dtformats/blob/main/documentation/Windows%20Recycle%20Bin.asciidoc) |
 | `prefetch/` | `make.mjs`, including a MAM/Xpress-Huffman copy of the same body | [libscca — Prefetch File format](https://github.com/libyal/libscca/blob/main/documentation/Windows%20Prefetch%20File%20(PF)%20format.asciidoc) |
 | `prefetch/DEVENV.EXE-854D7862.pf` | Real Windows 10 Prefetch from [EricZimmerman/Prefetch](https://github.com/EricZimmerman/Prefetch) test corpus, MIT licensed | as above |
+| `registry/` | Real hives from [EricZimmerman/Registry](https://github.com/EricZimmerman/Registry) test corpus, MIT licensed | ported from his source, see tasks/registry-hive.md |
 | `lnk/` | Created by Windows via `WScript.Shell` (see note below) | [MS-SHLLINK](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-shllink/) |
 
 ## Note on `lnk/notepad.lnk`
@@ -68,3 +69,14 @@ reach across them.
 It carries its own oracle: the file-metrics count in its header says 403
 entries, and a valid Prefetch file has exactly that many filename strings, so
 any decoder that produces a different number is provably wrong.
+
+## Note on `registry/`
+
+`SAM` is a genuine clean registry hive and `NotAHive` is a Windows PE
+executable, both from Eric Zimmerman's MIT licensed test corpus. The second is
+there deliberately: a parser that accepts it is not checking its signature.
+
+These are committed rather than generated because a synthetic hive would only
+ever exercise the shapes its generator knew to produce, and the awkward parts
+of the format - big-data values, the several kinds of subkey list, cells
+pointing at each other - are exactly the parts a generator would omit.

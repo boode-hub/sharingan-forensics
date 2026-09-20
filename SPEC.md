@@ -70,7 +70,7 @@ for a browser).
 | AmcacheParser | `Amcache.hve` | P2 | todo |
 | AppCompatCacheParser | ShimCache in `SYSTEM` | P2 | todo |
 | SBECmd / ShellBags Explorer | Shellbags in `USRCLASS.DAT`/`NTUSER.DAT` | P2 | todo |
-| EvtxECmd | `.evtx` (+ event maps) | P3 | todo |
+| EvtxECmd | `.evtx` records (BinXML payload pending) | P3 | **partial** — record framing done; BinXML next |
 | MFTECmd | `$MFT`, `$J`, `$Boot`, `$SDS`, `$I30`, `$LogFile` | P4 | todo |
 | SQLECmd | SQLite + map files | P5 | todo |
 | WxTCmd | `ActivitiesCache.db` | P5 | todo |

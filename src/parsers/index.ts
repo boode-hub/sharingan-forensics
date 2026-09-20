@@ -9,9 +9,10 @@
  */
 import { register } from '../core/registry';
 import { evtx } from './evtx';
+import { lnk } from './lnk';
 import { prefetch } from './prefetch';
 import { recycleBin } from './recyclebin';
 
-register(recycleBin, prefetch, evtx);
+register(recycleBin, prefetch, evtx, lnk);
 
-export { recycleBin, prefetch, evtx };
+export { recycleBin, prefetch, evtx, lnk };

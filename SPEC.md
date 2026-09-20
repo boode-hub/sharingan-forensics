@@ -60,7 +60,7 @@ for a browser).
 | EZ tool | Artifact | Phase | Status |
 |---|---|---|---|
 | PECmd | Prefetch `.pf` (incl. MAM/Xpress-Huffman) | P1 | **done** |
-| LECmd | Shortcuts `.lnk` | P1 | todo |
+| LECmd | Shortcuts `.lnk` | P1 | **done** |
 | JLECmd | `*.automaticDestinations-ms`, `*.customDestinations-ms` | P1 | todo |
 | RBCmd | Recycle Bin `$I`, `INFO2` | P1 | **done** |
 | RecentFileCacheParser | `RecentFileCache.bcf` | P1 | todo |

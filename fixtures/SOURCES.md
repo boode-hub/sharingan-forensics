@@ -24,6 +24,7 @@ produce them.
 |---|---|---|
 | `recyclebin/` | `make.mjs` | [libyal dtformats — Windows Recycle Bin](https://github.com/libyal/dtformats/blob/main/documentation/Windows%20Recycle%20Bin.asciidoc) |
 | `prefetch/` | `make.mjs`, including a MAM/Xpress-Huffman copy of the same body | [libscca — Prefetch File format](https://github.com/libyal/libscca/blob/main/documentation/Windows%20Prefetch%20File%20(PF)%20format.asciidoc) |
+| `prefetch/DEVENV.EXE-854D7862.pf` | Real Windows 10 Prefetch from [EricZimmerman/Prefetch](https://github.com/EricZimmerman/Prefetch) test corpus, MIT licensed | as above |
 | `lnk/` | Created by Windows via `WScript.Shell` (see note below) | [MS-SHLLINK](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-shllink/) |
 
 ## Note on `lnk/notepad.lnk`
@@ -50,3 +51,20 @@ fixture needs to prove.
 If a real-world sample is ever added, it must come from a public corpus with a
 licence permitting redistribution, and the licence and source URL must be
 recorded in the table above.
+
+## Note on `prefetch/DEVENV.EXE-854D7862.pf`
+
+The one real-world sample here. It comes from the test corpus of Eric
+Zimmerman's own Prefetch library, which is MIT licensed and therefore
+redistributable, and it is test data rather than evidence from an
+investigation.
+
+It is committed because the Xpress Huffman decompressor cannot be exercised
+without it. The synthetic MAM fixture beside it contains only literals, so it
+proves the container and the Huffman table but never a back-reference across a
+chunk boundary. This file decompresses to 380690 bytes, six chunks, and does
+reach across them.
+
+It carries its own oracle: the file-metrics count in its header says 403
+entries, and a valid Prefetch file has exactly that many filename strings, so
+any decoder that produces a different number is provably wrong.

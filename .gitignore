@@ -25,3 +25,6 @@ dist-ssr
 
 # Reference sources downloaded by implementers for porting; never committed
 .refs/
+
+# Scratch staging for real evidence during local testing; never committed
+public/_t/

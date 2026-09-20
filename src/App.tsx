@@ -12,6 +12,7 @@ export default function App() {
   const [row, setRow] = useState<Row | null>(null);
   const [filter, setFilter] = useState('');
   const [busy, setBusy] = useState(0);
+  const [bigFiles, setBigFiles] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
   const worker = useRef<Worker>(null);
 
@@ -29,6 +30,12 @@ export default function App() {
   const ingest = useCallback((files: FileList | File[]) => {
     for (const file of files) {
       setBusy((n) => n + 1);
+      // Everything in the file is parsed regardless of size — nothing is
+      // truncated. But past this point it takes long enough that silence looks
+      // like a hang, so say so rather than leave the analyst guessing.
+      if (file.size >= 64 * 1024 * 1024) {
+        setBigFiles((b) => [...b, `${file.name} (${bytes(file.size)})`]);
+      }
       worker.current?.postMessage({ id: nextId++, file } satisfies WorkRequest);
     }
   }, []);
@@ -73,6 +80,12 @@ export default function App() {
             Open artifacts…
           </label>
 
+          {busy > 0 && bigFiles.length > 0 && (
+            <p className="bigwarn">
+              Large file — this may take a while, and the whole file is still
+              parsed: {bigFiles.join(', ')}
+            </p>
+          )}
           {busy > 0 && (
             <p className="busy">
               Parsing {busy} file{busy > 1 ? 's' : ''}…

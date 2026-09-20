@@ -12,6 +12,18 @@
  *
  * Symbols 0-255 are literals. 256-511 encode a match: the low 4 bits are the
  * length nibble and the high 5 bits are the distance's bit width.
+ *
+ * ponytail: INCOMPLETE. Verified byte-correct on the first chunk of a real
+ * Windows 11 v31 Prefetch file — its embedded name hash matched the hash in its
+ * filename and the declared size matched the output length exactly — and every
+ * chunk's table lands on the right byte, so the bitstream stays in sync to the
+ * end. But decoded *content* starts diverging partway through the third chunk,
+ * which means a match is being copied from the wrong place while the stream
+ * itself stays aligned. Ruled out so far: the Huffman table build (chunk tables
+ * all have Kraft sum 1), the extended-length encodings (alternatives all fail
+ * outright), refill timing, chunk padding, and large match distances (chunk 0
+ * uses distances up to 41392 and is clean). Callers must warn when the output
+ * exceeds one 65536-byte chunk; src/parsers/prefetch.ts does.
  */
 
 const CHUNK = 65536;

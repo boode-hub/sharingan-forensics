@@ -8,8 +8,9 @@
  * registered parser.
  */
 import { register } from '../core/registry';
+import { prefetch } from './prefetch';
 import { recycleBin } from './recyclebin';
 
-register(recycleBin);
+register(recycleBin, prefetch);
 
-export { recycleBin };
+export { recycleBin, prefetch };

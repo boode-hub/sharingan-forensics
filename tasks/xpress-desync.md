@@ -67,8 +67,9 @@ The last one decodes as the single garbage character `ʩ`.
   uses.
 - **Chunk padding.** `if (bitcnt < 16) pos += 2` after each chunk is required to
   land on the next chunk's table.
-- **Match clamping.** Clamping a match to the chunk end is required; without it
-  a later chunk's table offset comes out wrong.
+- **Match clamping.** SUPERSEDED — see "THE ANSWER" below. Clamping appeared
+  necessary only because the distance bits were consumed in the wrong order;
+  with that corrected, do not clamp.
 - **Large distances.** The maximum distance bit-width is 15 and the largest
   distance observed is 65508, inside the 64 KiB window. Chunk 0 already uses
   distances above 40000 and is completely clean, so big distances are not by

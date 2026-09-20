@@ -57,11 +57,17 @@ he has already handled the awkward cases.
 
 Hive parsing and full key/value enumeration only.
 
-**Out of scope, do not attempt:** transaction-log replay for dirty hives
-(`rla`), deleted-key recovery from unallocated cells, and the RECmd batch
-plugins. Each is its own later task. A dirty hive (where the two sequence
-numbers in the header disagree) should still parse as far as it can, with a
-warning saying the hive is dirty and may be stale.
+Three further capabilities are **required for parity with Registry Explorer and
+are NOT being dropped** — they are sequenced as their own follow-up tasks
+because each is substantial: transaction-log replay for dirty hives (`rla`),
+deleted-key recovery from unallocated cells, and the RECmd batch plugins. Do
+not attempt them here, and do not design anything that would make them awkward
+to add.
+
+Until log replay exists, a dirty hive (one whose two header sequence numbers
+disagree) must still parse as far as it can AND warn that it is dirty and may
+be stale. An analyst must never be left unable to tell the difference between
+a hive that holds nothing and one this tool declined to read fully.
 
 ## Fixtures
 

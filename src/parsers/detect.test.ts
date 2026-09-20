@@ -20,10 +20,14 @@ describe('registry detection', () => {
     .map((d) => d.name);
 
   it('has a fixture directory for every registered parser', () => {
-    expect(dirs.sort()).toEqual(parsers.map((p) => p.id).sort());
+    // One direction only. A fixture directory with no parser yet is normal —
+    // fixtures are written first, on purpose, so the oracle exists before the
+    // parser that has to satisfy it.
+    const missing = parsers.map((p) => p.id).filter((id) => !dirs.includes(id));
+    expect(missing).toEqual([]);
   });
 
-  for (const dir of dirs) {
+  for (const dir of dirs.filter((d) => parsers.some((p) => p.id === d))) {
     const samples = readdirSync(join(FIXTURES, dir)).filter(
       (f) => !f.endsWith('.json') && !f.endsWith('.mjs') && !f.endsWith('.md'),
     );

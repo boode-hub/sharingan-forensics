@@ -1,0 +1,20 @@
+{
+  "notepad.lnk": [
+    {
+      "targetPath": "C:\\Windows\\System32\\notepad.exe",
+      "arguments": "-test arg",
+      "workingDirectory": "C:\\Windows\\System32",
+      "description": "Generated fixture",
+      "iconLocation": "C:\\Windows\\System32\\notepad.exe",
+      "targetSize": 360448,
+      "targetCreated": "2026-09-18T23:53:04.735Z",
+      "targetModified": "2026-09-18T23:53:04.748Z",
+      "targetAccessed": "2026-09-20T08:35:27.444Z",
+      "driveType": "Fixed",
+      "driveSerial": "107F8885",
+      "volumeLabel": "",
+      "machineId": "TESTHOST",
+      "offset": 0
+    }
+  ]
+}

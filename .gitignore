@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Reference sources downloaded by implementers for porting; never committed
+.refs/

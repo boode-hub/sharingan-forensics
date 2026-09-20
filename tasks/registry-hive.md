@@ -31,6 +31,18 @@ His source is MIT licensed and public. Read these files before writing anything:
 | The walker that ties it together | `Registry/RegistryHive.cs` |
 | The key abstraction and its path building | `Registry/Abstractions/RegistryKey.cs` |
 
+**Download them into `.refs/` inside this repository** (it is gitignored) and
+read them from there — writing outside the repository is blocked, which is what
+stopped the previous attempt. For example:
+
+```bash
+curl -sL -o .refs/NKCellRecord.cs https://raw.githubusercontent.com/EricZimmerman/Registry/master/Registry/Cells/NKCellRecord.cs
+```
+
+You will also want `Registry/Other/HBinRecord.cs` (cell walking),
+`Registry/Lists/DBListRecord.cs` (big data), `Registry/Lists/RIListRecord.cs`
+and `Registry/Other/Helpers.cs` (the signature constants).
+
 Raw URLs follow this shape:
 
 ```

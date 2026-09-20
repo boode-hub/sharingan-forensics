@@ -9,6 +9,11 @@ on:
 permissions:
   contents: read
 
+# A deploy that races another deploy can publish an older build over a newer one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -41,3 +46,23 @@ jobs:
             echo "::error::shipped code must not make network calls"
             exit 1
           fi
+
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        with:
+          path: dist
+
+  # Only runs after every check above has passed, so a broken parser cannot go live.
+  deploy:
+    needs: check
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

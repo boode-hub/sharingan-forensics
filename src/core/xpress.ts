@@ -13,17 +13,6 @@
  * Symbols 0-255 are literals. 256-511 encode a match: the low 4 bits are the
  * length nibble and the high 5 bits are the distance's bit width.
  *
- * ponytail: INCOMPLETE. Verified byte-correct on the first chunk of a real
- * Windows 11 v31 Prefetch file — its embedded name hash matched the hash in its
- * filename and the declared size matched the output length exactly — and every
- * chunk's table lands on the right byte, so the bitstream stays in sync to the
- * end. But decoded *content* starts diverging partway through the third chunk,
- * which means a match is being copied from the wrong place while the stream
- * itself stays aligned. Ruled out so far: the Huffman table build (chunk tables
- * all have Kraft sum 1), the extended-length encodings (alternatives all fail
- * outright), refill timing, chunk padding, and large match distances (chunk 0
- * uses distances up to 41392 and is clean). Callers must warn when the output
- * exceeds one 65536-byte chunk; src/parsers/prefetch.ts does.
  */
 
 const CHUNK = 65536;
@@ -120,9 +109,13 @@ export function xpressHuffmanDecompress(input: Uint8Array, outputSize: number): 
       fill();
       let distance = 1 << distBits;
       if (distBits > 0) {
+        // PEEK the distance bits but do not consume them yet — the extended
+        // length byte is read from `pos`, the same cursor the bit reader
+        // refills from, so consuming the distance bits before reading those
+        // bytes would change when the refill happens and desynchronise the
+        // stream. The reference (fox-it/dissect.util lzxpress_huffman.py) reads
+        // the extended length before it skips the distance bits.
         distance += (bitbuf >>> (32 - distBits)) & ((1 << distBits) - 1);
-        bitbuf = (bitbuf << distBits) >>> 0;
-        bitcnt -= distBits;
       }
 
       // A full length nibble means the real length follows in the byte stream,
@@ -138,10 +131,19 @@ export function xpressHuffmanDecompress(input: Uint8Array, outputSize: number): 
       }
       length += 3;
 
+      // Only now consume the distance bits, after the extended length bytes
+      // have been read from `pos`.
+      if (distBits > 0) {
+        bitbuf = (bitbuf << distBits) >>> 0;
+        bitcnt -= distBits;
+      }
+
       if (distance > outPos) throw new XpressError(`match distance ${distance} before output start`);
-      // Overlapping copies are legal and common — copy byte by byte, stopping
-      // at the chunk boundary rather than spilling into the next chunk.
-      for (let i = 0; i < length && outPos < chunkEnd; i++) {
+      // Overlapping copies are legal and common — copy byte by byte. Do not
+      // clamp a match to the chunk end: the reference lets the final match of a
+      // chunk overshoot 65536 and the loop condition is `while chunk_size <
+      // 65536`, so matches may write up to the actual output boundary.
+      for (let i = 0; i < length && outPos < outputSize; i++) {
         out[outPos] = out[outPos - distance];
         outPos++;
       }

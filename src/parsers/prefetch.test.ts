@@ -117,7 +117,9 @@ describe.skipIf(!existsSync(REAL_PF))('real Windows 11 Prefetch', () => {
     const times = rows.map((r) => (r.runTime as Date).getTime());
     expect(times.every((t) => t > Date.parse('2000-01-01') && t < Date.now() + 864e5)).toBe(true);
 
-    // The multi-chunk caveat must be surfaced, never silently swallowed.
-    expect(warnings.some((w) => w.message.includes('must not be relied on'))).toBe(true);
+    // The multi-chunk caveat is gone: the decompressor now decodes every chunk,
+    // so the loaded-file list and volume block are reliable and no warning is
+    // emitted for spanning multiple chunks.
+    expect(warnings.some((w) => w.message.includes('must not be relied on'))).toBe(false);
   });
 });

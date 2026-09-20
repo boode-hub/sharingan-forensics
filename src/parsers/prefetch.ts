@@ -231,21 +231,6 @@ export const prefetch: Parser = {
       return;
     }
 
-    // Known limitation, see the note in src/core/xpress.ts: decompression is
-    // verified byte-correct for the first 64 KiB chunk but desynchronises
-    // somewhere in later chunks on real multi-chunk files. Header fields all
-    // live in the first chunk and are trustworthy; the filename-string list and
-    // the volume block usually do not, so say so rather than presenting
-    // corrupted paths as evidence.
-    if (buf.length > 65536) {
-      ctx.warn(
-        65536,
-        'decompressed body spans multiple chunks: executable, hash, version, ' +
-          'run count and run times are verified, but the loaded-file list and ' +
-          'volume details may be corrupted and must not be relied on',
-      );
-    }
-
     // Parse header
     const header = parseHeader(buf, ctx, 0);
     if (!header) return;

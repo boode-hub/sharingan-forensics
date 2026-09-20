@@ -21,7 +21,7 @@ suite is not. The coverage table in SPEC.md is the honest list of what works.
 | | |
 |---|---|
 | Recycle Bin (`$I`, `INFO2`) — RBCmd | working |
-| Prefetch (`.pf`) — PECmd | partial: metadata verified, file list not |
+| Prefetch (`.pf`) — PECmd | working |
 | Everything else | see SPEC.md |
 
 ## Running it

@@ -59,7 +59,7 @@ for a browser).
 
 | EZ tool | Artifact | Phase | Status |
 |---|---|---|---|
-| PECmd | Prefetch `.pf` (incl. MAM/Xpress-Huffman) | P1 | **partial** — header fields verified; loaded-file list and volume block unreliable on multi-chunk files |
+| PECmd | Prefetch `.pf` (incl. MAM/Xpress-Huffman) | P1 | **done** |
 | LECmd | Shortcuts `.lnk` | P1 | todo |
 | JLECmd | `*.automaticDestinations-ms`, `*.customDestinations-ms` | P1 | todo |
 | RBCmd | Recycle Bin `$I`, `INFO2` | P1 | **done** |

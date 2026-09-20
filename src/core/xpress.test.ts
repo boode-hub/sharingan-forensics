@@ -63,6 +63,57 @@ describe('xpressHuffmanDecompress', () => {
     const packed = new Uint8Array(readFileSync(new URL('NOTEPAD.EXE-MAMTEST.pf', dir)));
     expect(unwrapMam(packed)).toEqual(plain);
   });
+
+  it('decompresses the committed multi-chunk sample without desync', () => {
+    // The real Win10 Prefetch corpus sample: 6 chunks, declared size 380690.
+    // Its 403 filename strings must stay intact, which is where the old decoder
+    // desynchronised and produced 592 corrupted strings.
+    const dir = new URL('../../fixtures/prefetch/', import.meta.url);
+    const path = new URL('DEVENV.EXE-854D7862.pf', dir);
+    const buf = new Uint8Array(readFileSync(path));
+
+    expect(magic(buf, 'MAM')).toBe(true);
+    const declared = (buf[4] | (buf[5] << 8) | (buf[6] << 16) | (buf[7] << 24)) >>> 0;
+    expect(declared).toBe(380690);
+
+    const out = unwrapMam(buf);
+    expect(out.length).toBe(380690);
+
+    const version = out[0] | (out[1] << 8) | (out[2] << 16) | (out[3] << 24);
+    expect(version).toBe(30);
+    expect(magic(out, 'SCCA', 4)).toBe(true);
+
+    const hash = new DataView(out.buffer, out.byteOffset + 76, 4).getUint32(0, true);
+    expect(hash.toString(16).toUpperCase().padStart(8, '0')).toBe('854D7862');
+
+    // File-metrics entry count at header offset 88 says 403; that many
+    // NUL-terminated UTF-16LE strings must split the filename region cleanly.
+    const entryCount = new DataView(out.buffer, out.byteOffset + 88, 4).getUint32(0, true);
+    expect(entryCount).toBe(403);
+
+    const stringsOffset = new DataView(out.buffer, out.byteOffset + 100, 4).getUint32(0, true);
+    const stringsSize = new DataView(out.buffer, out.byteOffset + 104, 4).getUint32(0, true);
+    expect(stringsOffset + stringsSize).toBeLessThanOrEqual(out.length);
+
+    const strings: string[] = [];
+    let pos = stringsOffset;
+    const end = stringsOffset + stringsSize;
+    const dv = new DataView(out.buffer, out.byteOffset, out.length);
+    while (pos < end) {
+      let strEnd = pos;
+      while (strEnd + 1 < end && dv.getUint16(strEnd, true) !== 0) strEnd += 2;
+      strings.push(new TextDecoder('utf-16le').decode(out.subarray(pos, strEnd)));
+      pos = strEnd + 2;
+    }
+    expect(strings.length).toBe(403);
+    // Every path must be clean readable text: no stray C0-control glyphs and
+    // the last one a real path rather than the single garbage char `ʩ`.
+    for (const s of strings) {
+      expect(s.length).toBeGreaterThan(0);
+      expect(/[\u0000-\u001f\u007f-\u009f]/.test(s)).toBe(false);
+    }
+    expect(strings[strings.length - 1].length).toBeGreaterThan(2);
+  });
 });
 
 /**

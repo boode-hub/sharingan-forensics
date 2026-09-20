@@ -4,7 +4,7 @@
  * Replicates: Eric Zimmerman's LECmd
  */
 import type { Column, Parser, Reader, Ctx, Row } from '../core/types';
-import { Cursor } from '../core/binary';
+import { Cursor, guid } from '../core/binary';
 
 const LinkCLSID = '00021401-0000-0000-C000-000000000046';
 
@@ -54,9 +54,8 @@ export const lnk: Parser = {
   sniff(head: Uint8Array, _filename: string): boolean {
     if (head.length < 20) return false;
     if (head[0] !== 0x4c || head[1] !== 0x00 || head[2] !== 0x00 || head[3] !== 0x00) return false;
-    const clsidBytes = head.subarray(4, 20);
-    const expected = [0x00, 0x02, 0x14, 0x01, 0x00, 0x00, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46];
-    return clsidBytes.every((v, i) => v === expected[i]);
+    const clsid = guid(head.subarray(4, 20));
+    return clsid.toLowerCase() === LinkCLSID.toLowerCase();
   },
   async *parse(reader: Reader, ctx: Ctx): AsyncGenerator<Row> {
     const HEADER_SIZE = 76;

@@ -59,6 +59,27 @@ describe('lnk parser', () => {
     }
   });
 
+  describe('sniff', () => {
+    const buf = loadFixture('notepad.lnk');
+
+    it('returns true for notepad.lnk', () => {
+      expect(lnk.sniff(buf, 'notepad.lnk')).toBe(true);
+    });
+
+    it('returns true for carved shortcut with no .lnk extension', () => {
+      expect(lnk.sniff(buf, 'carved-0001.bin')).toBe(true);
+    });
+
+    it('returns false for random bytes with wrong CLSID', () => {
+      const garbage = new Uint8Array(20);
+      garbage[0] = 0x4c;
+      garbage[1] = 0x00;
+      garbage[2] = 0x00;
+      garbage[3] = 0x00;
+      expect(lnk.sniff(garbage, 'random.bin')).toBe(false);
+    });
+  });
+
   describe('garbage test', () => {
     it('does not throw on random bytes with valid header', async () => {
       const buf = new Uint8Array(4096);

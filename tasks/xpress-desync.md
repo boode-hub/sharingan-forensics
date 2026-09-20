@@ -89,6 +89,43 @@ Because the stream stays aligned but the bytes come out wrong, suspect the
 - Whether `distance` is measured from the chunk start rather than the current
   output position.
 
+## THE ANSWER — found in the reference implementation
+
+Stop hypothesising; the cause is confirmed. The authoritative reference is:
+
+  https://raw.githubusercontent.com/fox-it/dissect.util/main/dissect/util/compression/lzxpress_huffman.py
+
+Its inner loop does this, in this exact order:
+
+```python
+offset = (1 << symbol) + bitstring.lookup(symbol)   # PEEK the distance bits
+if length == 15:
+    length = ord(bitstring.read(1)) + 15            # read the extended-length BYTE
+    if length == 270:
+        length = _read_16_bit(bitstring.source)
+bitstring.skip(symbol)                              # only NOW consume the distance bits
+length += 3
+```
+
+Note `lookup()` **peeks** the distance bits and `skip()` consumes them *after*
+the extended-length bytes have been read. Our implementation consumes the
+distance bits immediately, before reading those bytes. That ordering changes
+when the bit reader refills, which changes `pos`, and `pos` is exactly the
+cursor the extended-length byte is read from. The two orderings agree whenever
+the length nibble is not 15 and disagree whenever it is — which is why chunks
+containing many extended lengths are the corrupt ones.
+
+Two things to change:
+
+1. Peek the distance bits, read any extended-length bytes, and only then
+   consume the distance bits.
+2. Do **not** clamp a match to the chunk end. The reference tracks
+   `chunk_size += length` with the full length and lets the final match of a
+   chunk overshoot 65536; the loop condition is `while chunk_size < 65536`.
+   Our current clamp truncates those matches.
+
+Keep everything else as it is.
+
 ## Definition of done
 
 1. The filename-strings region splits into exactly **403** NUL-terminated

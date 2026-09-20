@@ -1,14 +1,16 @@
 /**
- * Windows XML Event Log (EVTX) parser — record framing only.
- * Format reference:
- *   - https://github.com/libyal/libevtx/blob/main/documentation/Windows%20XML%20Event%20Log%20(EVTX).asciidoc
+ * Windows XML Event Log (EVTX) parser with full BinXML decoding.
  *
- * Scope: the file header, the 65536-byte chunks, and the event-record framing.
- * The BinXML payload inside each record is not decoded here — it is a separate
- * job. Each record yields its payload length and moves on.
+ * Format references:
+ *   - [MS-EVEN6]: Event Log Remoting Protocol
+ *   - libevtx documentation:
+ *       https://github.com/libyal/libevtx/blob/main/documentation/Windows%20XML%20Event%20Log%20(EVTX).asciidoc
+ *   - Eric Zimmerman's evtx project (EvtxECmd):
+ *       https://github.com/EricZimmerman/evtx
  */
 import type { Column, Parser, Reader, Ctx, Row } from '../core/types';
 import { Cursor, magic } from '../core/binary';
+import { ChunkCache, decodeRecordBinXml, type DecodedRecord } from './evtx/binxml';
 
 const HEADER_SIZE = 4096;
 const CHUNK_SIZE = 65536;
@@ -17,10 +19,18 @@ const RECORDS_START = 512;
 const columns: Column[] = [
   { key: 'recordId', label: 'Record ID', type: 'num' },
   { key: 'writtenTime', label: 'Written Time', type: 'date' },
+  { key: 'eventId', label: 'Event ID', type: 'num' },
+  { key: 'level', label: 'Level', type: 'str' },
+  { key: 'provider', label: 'Provider', type: 'str' },
+  { key: 'channel', label: 'Channel', type: 'str' },
+  { key: 'computer', label: 'Computer', type: 'str' },
+  { key: 'userId', label: 'User ID', type: 'str' },
+  { key: 'processId', label: 'Process ID', type: 'num' },
+  { key: 'threadId', label: 'Thread ID', type: 'num' },
+  { key: 'payload', label: 'Payload', type: 'str' },
+  { key: 'xml', label: 'XML', type: 'str', secondary: true },
   { key: 'chunkNumber', label: 'Chunk', type: 'num' },
-  { key: 'recordSize', label: 'Record Size', type: 'num' },
-  { key: 'dataLength', label: 'Data Length', type: 'num' },
-  { key: 'offset', label: 'Offset', type: 'num', secondary: true },
+  { key: 'offset', label: 'Offset', type: 'num' },
 ];
 
 export const evtx: Parser = {
@@ -60,20 +70,24 @@ export const evtx: Parser = {
 
       foundChunks++;
 
-      const c = new Cursor(chunk, 0);
-      c.u64(); // first event record number
-      c.u64(); // last event record number
-      c.u64(); // first event record identifier
-      c.u64(); // last event record identifier
-      c.u32(); // header size (128)
-      c.u32(); // last record offset
-      const freeOffset = c.u32();
+      // Chunk header cursor starts at offset 8 to skip 'ElfChnk\0' signature
+      const c = new Cursor(chunk, 8);
+      c.u64(); // first event record number (chunk offset 8..15)
+      c.u64(); // last event record number (chunk offset 16..23)
+      c.u64(); // first event record identifier (chunk offset 24..31)
+      c.u64(); // last event record identifier (chunk offset 32..39)
+      c.u32(); // header size (128) (chunk offset 40..43)
+      c.u32(); // last record offset (chunk offset 44..47)
+      const freeOffset = c.u32(); // free space offset (chunk offset 48..51)
 
       let end = freeOffset;
       if (freeOffset > chunk.length || freeOffset < RECORDS_START) {
         ctx.warn(offset + 48, `free space offset ${freeOffset} is out of bounds; using chunk end`);
         end = chunk.length;
       }
+
+      // Initialize per-chunk caches for templates and strings
+      const chunkCache = new ChunkCache(chunk, chunkNumber);
 
       let pos = RECORDS_START;
       let truncated = false;
@@ -104,9 +118,30 @@ export const evtx: Parser = {
           ctx.warn(offset + pos, `trailing size copy ${trail} does not match leading size ${size}`);
         }
 
+        const payloadBytes = chunk.subarray(pos + 24, pos + size - 4);
+        let decoded: DecodedRecord | null = null;
+
+        if (!truncated && payloadBytes.length > 0) {
+          try {
+            decoded = decodeRecordBinXml(payloadBytes, pos + 24, chunk, chunkCache);
+          } catch (err) {
+            ctx.warn(offset + pos, `BinXML decode failed: ${(err as Error).message}`);
+          }
+        }
+
         yield {
           recordId: Number(id),
           writtenTime: written,
+          eventId: decoded?.eventId ?? null,
+          level: decoded?.level ?? null,
+          provider: decoded?.provider ?? null,
+          channel: decoded?.channel ?? null,
+          computer: decoded?.computer ?? null,
+          userId: decoded?.userId ?? null,
+          processId: decoded?.processId ?? null,
+          threadId: decoded?.threadId ?? null,
+          payload: decoded?.payload ?? null,
+          xml: decoded?.xml ?? null,
           chunkNumber,
           recordSize: size,
           dataLength: size - 28,

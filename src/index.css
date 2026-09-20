@@ -232,8 +232,82 @@ main {
   display: flex;
   flex-direction: column;
 }
+
+.grid-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 12px;
+}
+.colbtn {
+  padding: 3px 9px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.colbtn:hover {
+  border-color: var(--accent);
+}
+.colbtn.warn {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.grid-bar .hint {
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.grid-bar code {
+  font-family: var(--mono);
+  color: var(--fg);
+  background: var(--panel2);
+  padding: 0 3px;
+  border-radius: 3px;
+}
+
+.colpick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel2);
+  font-size: 12px;
+  max-height: 25%;
+  overflow: auto;
+}
+.colpick label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* One scrolling surface: header, filter row and body share it, so they stay
+   aligned horizontally while the first two stick vertically. */
+.grid-scroll {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+}
+.grid-inner {
+  position: relative;
+  min-width: 100%;
+}
+
 .grid-head {
   display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 3;
   background: var(--panel2);
   border-bottom: 1px solid var(--line);
   font-family: var(--mono);
@@ -246,6 +320,7 @@ main {
   text-align: left;
   cursor: pointer;
   font-weight: 600;
+  flex: none;
 }
 .grid-head .th:hover {
   color: var(--accent);
@@ -255,14 +330,18 @@ main {
   margin-left: 4px;
   font-size: 9px;
 }
+
 .grid-filters {
   display: flex;
+  position: sticky;
+  z-index: 2;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
 }
 .grid-filters .cell {
   border-bottom: 0;
   padding: 2px 4px;
+  flex: none;
 }
 .grid-filters input {
   width: 100%;
@@ -280,24 +359,11 @@ main {
 .grid-filters input:not(:placeholder-shown) {
   border-color: var(--accent);
 }
-.clearf {
-  width: 100%;
-  background: none;
-  border: 0;
-  color: var(--accent);
-  cursor: pointer;
-  font-size: 11px;
-}
 
-.grid-scroll {
-  flex: 1;
-  overflow: auto;
-}
 .grid-row {
   position: absolute;
   top: 0;
   left: 0;
-  width: 100%;
   display: flex;
   font-family: var(--mono);
   font-size: 12px;
@@ -309,7 +375,7 @@ main {
   background: var(--panel2);
 }
 .cell {
-  flex: 1;
+  flex: none;
   min-width: 0;
   padding: 4px 9px;
   white-space: nowrap;
@@ -326,8 +392,6 @@ main {
   font-variant-numeric: tabular-nums;
 }
 .cell.idx {
-  flex: none;
-  width: 64px;
   text-align: right;
   color: var(--dim);
 }
@@ -336,6 +400,9 @@ main {
   border-top: 1px solid var(--line);
   color: var(--dim);
   font-size: 12px;
+}
+.grid-foot strong {
+  color: var(--fg);
 }
 
 .detail {

@@ -1,9 +1,20 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Column, Row } from '../core/types';
 import { fmt } from './format';
 
 const ROW_H = 26;
+const HEAD_H = 26;
+const IDX_W = 62;
+
+/** Fixed width per column type. Predictable beats clever, and it lets the row
+ *  be wider than the viewport so a 14-column table scrolls instead of crushing. */
+function widthOf(c: Column): number {
+  if (c.type === 'num') return 120;
+  if (c.type === 'date') return 195;
+  if (c.type === 'bool') return 90;
+  return 230;
+}
 
 /** Sorts nulls last regardless of direction — "not recorded" is never a value. */
 function compare(a: unknown, b: unknown): number {
@@ -86,9 +97,23 @@ export function Grid({
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 } | null>(null);
   const [active, setActive] = useState(-1);
   const [colFilters, setColFilters] = useState<Record<string, string>>({});
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [pickerOpen, setPickerOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const visible = useMemo(() => columns.filter((c) => !c.secondary), [columns]);
+  // Every column is shown unless the analyst hides it. Nothing is withheld by
+  // default: in a forensic tool, a column you cannot see is evidence you do
+  // not know exists.
+  const visible = useMemo(() => columns.filter((c) => !hidden.has(c.key)), [columns, hidden]);
+
+  // A new artifact has different columns, so drop stale hides and filters.
+  const colKey = columns.map((c) => c.key).join('|');
+  useEffect(() => {
+    setHidden(new Set());
+    setColFilters({});
+    setSort(null);
+    setActive(-1);
+  }, [colKey]);
 
   const activeCols = useMemo(
     () => Object.entries(colFilters).filter(([, v]) => v.trim()),
@@ -119,99 +144,138 @@ export function Grid({
     overscan: 20,
     // The scroll element measures 0 until a ResizeObserver fires. Without a
     // non-zero starting rect the grid renders an empty body while the footer
-    // reports the real row count. Assume a screenful up front; the observer
-    // corrects it on first paint.
-    // ponytail: if the virtualizer ever records a 0 height (grid mounted inside
-    // a collapsed panel, or a tab that never paints) it stays empty until the
-    // observer fires again. Call virt.measure() on a 0 -> non-zero transition
-    // if the grid is ever put behind an accordion or a background tab.
+    // reports the real row count.
     initialRect: { width: 1200, height: 800 },
   });
 
-  const toggle = (key: string) =>
+  const toggleSort = (key: string) =>
     setSort((s) => (s?.key !== key ? { key, dir: 1 } : s.dir === 1 ? { key, dir: -1 } : null));
+
+  const totalW = IDX_W + visible.reduce((n, c) => n + widthOf(c), 0);
+  const filtered = activeCols.length > 0 || filter.trim().length > 0;
 
   return (
     <div className="grid">
-      <div className="grid-head">
-        <div className="cell idx">#</div>
-        {visible.map((c) => (
-          <button
-            type="button"
-            key={c.key}
-            className="cell th"
-            onClick={() => toggle(c.key)}
-            title={`Sort by ${c.label}`}
-          >
-            {c.label}
-            <span className="sort">
-              {sort?.key === c.key ? (sort.dir === 1 ? '▲' : '▼') : ''}
-            </span>
+      <div className="grid-bar">
+        <button type="button" className="colbtn" onClick={() => setPickerOpen((o) => !o)}>
+          Columns {columns.length - hidden.size}/{columns.length}
+        </button>
+        {hidden.size > 0 && (
+          <button type="button" className="colbtn" onClick={() => setHidden(new Set())}>
+            Show all
           </button>
-        ))}
+        )}
+        {activeCols.length > 0 && (
+          <button type="button" className="colbtn warn" onClick={() => setColFilters({})}>
+            Clear {activeCols.length} filter{activeCols.length > 1 ? 's' : ''}
+          </button>
+        )}
+        <span className="hint">
+          Filter a column: <code>4624</code> contains · <code>=4624</code> exact ·{' '}
+          <code>!x</code> excludes · <code>&gt;=2019-02-13</code> from that time (UTC)
+        </span>
       </div>
 
-      <div className="grid-filters">
-        <div className="cell idx" title="Clear all column filters">
-          {activeCols.length > 0 && (
-            <button type="button" className="clearf" onClick={() => setColFilters({})}>
-              ✕
-            </button>
-          )}
+      {pickerOpen && (
+        <div className="colpick">
+          {columns.map((c) => (
+            <label key={c.key}>
+              <input
+                type="checkbox"
+                checked={!hidden.has(c.key)}
+                onChange={() =>
+                  setHidden((h) => {
+                    const n = new Set(h);
+                    if (n.has(c.key)) n.delete(c.key);
+                    else n.add(c.key);
+                    return n;
+                  })
+                }
+              />
+              {c.label}
+            </label>
+          ))}
         </div>
-        {visible.map((c) => (
-          <div className="cell" key={c.key}>
-            <input
-              value={colFilters[c.key] ?? ''}
-              placeholder={c.type === 'date' ? '>=2019-02-13' : c.type === 'num' ? '=4624' : 'filter'}
-              title={`Filter ${c.label}. Plain text matches a substring; ! negates; = > < >= <= compare, and dates compare as time.`}
-              onChange={(e) => setColFilters((f) => ({ ...f, [c.key]: e.target.value }))}
-            />
-          </div>
-        ))}
-      </div>
+      )}
 
       <div className="grid-scroll" ref={scrollRef}>
-        <div style={{ height: virt.getTotalSize(), position: 'relative' }}>
-          {virt.getVirtualItems().map((vi) => {
-            const r = view[vi.index];
-            return (
-              <div
-                key={vi.key}
-                className={`grid-row${vi.index === active ? ' on' : ''}`}
-                style={{ transform: `translateY(${vi.start}px)`, height: ROW_H }}
-                onClick={() => {
-                  setActive(vi.index);
-                  onSelect(r);
-                }}
+        {/* One scrolling surface so the header, the filter row and the body
+            stay aligned horizontally; the first two are sticky vertically. */}
+        <div className="grid-inner" style={{ width: totalW }}>
+          <div className="grid-head" style={{ height: HEAD_H }}>
+            <div className="cell idx" style={{ width: IDX_W }}>
+              #
+            </div>
+            {visible.map((c) => (
+              <button
+                type="button"
+                key={c.key}
+                className="cell th"
+                style={{ width: widthOf(c) }}
+                onClick={() => toggleSort(c.key)}
+                title={`Sort by ${c.label}`}
               >
-                <div className="cell idx">{vi.index + 1}</div>
-                {visible.map((c) => (
-                  <div
-                    key={c.key}
-                    className={`cell${c.type === 'num' ? ' num' : ''}`}
-                    title={fmt(r[c.key])}
-                  >
-                    {fmt(r[c.key])}
-                  </div>
-                ))}
+                {c.label}
+                <span className="sort">
+                  {sort?.key === c.key ? (sort.dir === 1 ? '▲' : '▼') : ''}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="grid-filters" style={{ top: HEAD_H }}>
+            <div className="cell idx" style={{ width: IDX_W }} />
+            {visible.map((c) => (
+              <div className="cell" key={c.key} style={{ width: widthOf(c) }}>
+                <input
+                  value={colFilters[c.key] ?? ''}
+                  placeholder={c.type === 'date' ? '>=2019-02-13' : c.type === 'num' ? '=4624' : 'filter'}
+                  onChange={(e) => setColFilters((f) => ({ ...f, [c.key]: e.target.value }))}
+                />
               </div>
-            );
-          })}
+            ))}
+          </div>
+
+          <div style={{ height: virt.getTotalSize(), position: 'relative' }}>
+            {virt.getVirtualItems().map((vi) => {
+              const r = view[vi.index];
+              return (
+                <div
+                  key={vi.key}
+                  className={`grid-row${vi.index === active ? ' on' : ''}`}
+                  style={{ transform: `translateY(${vi.start}px)`, height: ROW_H, width: totalW }}
+                  onClick={() => {
+                    setActive(vi.index);
+                    onSelect(r);
+                  }}
+                >
+                  <div className="cell idx" style={{ width: IDX_W }}>
+                    {vi.index + 1}
+                  </div>
+                  {visible.map((c) => (
+                    <div
+                      key={c.key}
+                      className={`cell${c.type === 'num' ? ' num' : ''}`}
+                      style={{ width: widthOf(c) }}
+                      title={fmt(r[c.key])}
+                    >
+                      {fmt(r[c.key])}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
       <div className="grid-foot">
-        {view.length.toLocaleString()} of {rows.length.toLocaleString()} rows
-        {(filter.trim() || activeCols.length > 0) && (
-          <>
-            {' '}
-            (filtered
-            {activeCols.length > 0 &&
-              ` on ${activeCols.map(([k]) => columns.find((c) => c.key === k)?.label ?? k).join(', ')}`}
-            )
-          </>
-        )}
+        Showing <strong>{view.length.toLocaleString()}</strong> of{' '}
+        {rows.length.toLocaleString()} rows
+        {filtered
+          ? ` — filtered${activeCols.length ? ` on ${activeCols.map(([k]) => columns.find((c) => c.key === k)?.label ?? k).join(', ')}` : ''}`
+          : ' — everything in the file'}
+        {hidden.size > 0 && ` · ${hidden.size} column${hidden.size > 1 ? 's' : ''} hidden`}
       </div>
     </div>
   );

@@ -28,8 +28,18 @@ describe('registry detection', () => {
   });
 
   for (const dir of dirs.filter((d) => parsers.some((p) => p.id === d))) {
+    // A fixture directory may carry a reject.json naming samples that detect()
+    // must deliberately NOT claim, such as a PE executable filed with the
+    // registry hives to prove the signature check works.
+    let rejected: string[] = [];
+    try {
+      rejected = JSON.parse(readFileSync(join(FIXTURES, dir, 'reject.json'), 'utf8')).reject ?? [];
+    } catch {
+      // no reject.json; every sample is expected to be detected
+    }
     const samples = readdirSync(join(FIXTURES, dir)).filter(
-      (f) => !f.endsWith('.json') && !f.endsWith('.mjs') && !f.endsWith('.md'),
+      (f) =>
+        !f.endsWith('.json') && !f.endsWith('.mjs') && !f.endsWith('.md') && !rejected.includes(f),
     );
 
     it(`${dir}: every sample is detected as "${dir}"`, async () => {

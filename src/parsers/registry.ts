@@ -568,8 +568,8 @@ async function decodeValue(reader: Reader, vk: CellRec, minor: number): Promise<
     }
   }
 
-  const isResident = (dataLenRaw & 0x80000000) === 0x80000000;
-  let dataLen = isResident ? dataLenRaw - 0x80000000 : dataLenRaw;
+  const isResident = (dataLenRaw & 0x80000000) !== 0;
+  let dataLen = isResident ? dataLenRaw & 0x7fffffff : dataLenRaw;
 
   let dataBlock: Uint8Array;
   let internalOffset: number;
@@ -599,16 +599,24 @@ async function decodeValue(reader: Reader, vk: CellRec, minor: number): Promise<
       const offsetsRel = new DataView(db.buffer, db.byteOffset + 8, 4).getUint32(0, true);
       const listCell = await readCellRaw(reader, offsetsRel);
       if (!listCell) return null;
-      const chunks: number[] = [];
+      const segments: Uint8Array[] = [];
+      let totalBytes = 0;
       for (let i = 1; i <= dbEntries; i++) {
         if (i * 4 + 4 > listCell.length) break;
         const segRel = new DataView(listCell.buffer, listCell.byteOffset + i * 4, 4).getUint32(0, true);
         const segCell = await readCellRaw(reader, segRel);
-        if (!segCell) continue;
+        if (!segCell || segCell.length <= 4) continue;
         const segLen = Math.min(segCell.length - 4, 16344);
-        for (let j = 4; j < 4 + segLen; j++) chunks.push(segCell[j]);
+        const segment = segCell.subarray(4, 4 + segLen);
+        segments.push(segment);
+        totalBytes += segment.length;
       }
-      dataBlock = new Uint8Array(chunks);
+      dataBlock = new Uint8Array(totalBytes);
+      let offset = 0;
+      for (const seg of segments) {
+        dataBlock.set(seg, offset);
+        offset += seg.length;
+      }
       internalOffset = 0;
     } else {
       dataBlock = cell;

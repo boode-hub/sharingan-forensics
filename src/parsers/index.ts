@@ -11,8 +11,9 @@ import { register } from '../core/registry';
 import { evtx } from './evtx';
 import { lnk } from './lnk';
 import { prefetch } from './prefetch';
+import { registry } from './registry';
 import { recycleBin } from './recyclebin';
 
-register(recycleBin, prefetch, evtx, lnk);
+register(recycleBin, prefetch, evtx, lnk, registry);
 
-export { recycleBin, prefetch, evtx, lnk };
+export { recycleBin, prefetch, evtx, lnk, registry };

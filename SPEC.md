@@ -64,7 +64,7 @@ for a browser).
 | JLECmd | `*.automaticDestinations-ms`, `*.customDestinations-ms` | P1 | todo |
 | RBCmd | Recycle Bin `$I`, `INFO2` | P1 | **done** |
 | RecentFileCacheParser | `RecentFileCache.bcf` | P1 | todo |
-| Registry Explorer | Registry hives (`regf`) | P2 | todo |
+| Registry Explorer | Registry hives (`regf`) | P2 | **done** — keys, values, resident and big-data |
 | rla | Hive transaction logs `.LOG1`/`.LOG2` | P2 | todo |
 | RECmd | Batch queries over hives | P2 | todo |
 | AmcacheParser | `Amcache.hve` | P2 | todo |

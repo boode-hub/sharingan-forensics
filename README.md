@@ -24,6 +24,7 @@ suite is not. The coverage table in SPEC.md is the honest list of what works.
 | Prefetch (`.pf`) — PECmd | working |
 | Shortcuts (`.lnk`) — LECmd | working |
 | Event logs (`.evtx`) — EvtxECmd | records working, BinXML pending |
+| Registry hives — Registry Explorer | working |
 | Everything else | see SPEC.md |
 
 ## Running it

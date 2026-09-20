@@ -1,0 +1,4 @@
+{
+  "_comment": "Fixtures here are deliberate NEGATIVE cases: detect() must NOT claim them. NotAHive is a Windows PE executable; a parser that accepts it is not checking its signature.",
+  "reject": ["NotAHive"]
+}

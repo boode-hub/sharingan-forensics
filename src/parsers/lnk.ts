@@ -194,6 +194,8 @@ export const lnk: Parser = {
       }
     }
 
+    pos = linkInfoEnd;
+
     // StringData
     let description: string | null = null;
     let relativePath: string | null = null;

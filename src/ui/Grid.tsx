@@ -51,10 +51,14 @@ export function Grid({
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_H,
     overscan: 20,
-    // The scroll element measures 0 until a ResizeObserver fires, which never
-    // happens on a page that has not painted yet. Without a non-zero starting
-    // rect the grid renders an empty body while the footer reports the real
-    // row count. Assume a screenful up front; the observer corrects it.
+    // The scroll element measures 0 until a ResizeObserver fires. Without a
+    // non-zero starting rect the grid renders an empty body while the footer
+    // reports the real row count. Assume a screenful up front; the observer
+    // corrects it on first paint.
+    // ponytail: if the virtualizer ever records a 0 height (grid mounted inside
+    // a collapsed panel, or a tab that never paints) it stays empty until the
+    // observer fires again. Call virt.measure() on a 0 -> non-zero transition
+    // if the grid is ever put behind an accordion or a background tab.
     initialRect: { width: 1200, height: 800 },
   });
 

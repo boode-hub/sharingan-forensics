@@ -13,12 +13,14 @@ tool-by-tool coverage table and the phase plan.
 
 ## Status
 
+**Live at <https://boode-hub.github.io/sharingan-forensics/>**
+
 Early. The foundation, the app shell and the first parser are in; most of the
 suite is not. The coverage table in SPEC.md is the honest list of what works.
 
 | | |
 |---|---|
-| Recycle Bin (`$I`, `INFO2`) — RBCmd | in review |
+| Recycle Bin (`$I`, `INFO2`) — RBCmd | working |
 | Everything else | see SPEC.md |
 
 ## Running it

@@ -1,0 +1,54 @@
+{
+  "NOTEPAD.EXE-AAAAAAAA.pf": [
+    {
+      "executable": "NOTEPAD.EXE",
+      "runTime": "2024-03-01T08:15:00.000Z",
+      "runCount": 7,
+      "version": 31,
+      "hash": "07467E92",
+      "filesLoaded": 2,
+      "volumeDevice": "\\DEVICE\\HARDDISKVOLUME3",
+      "volumeSerial": "A1B2C3D4",
+      "volumeCreated": "2023-01-05T09:00:00.000Z",
+      "offset": 128
+    },
+    {
+      "executable": "NOTEPAD.EXE",
+      "runTime": "2024-02-28T17:42:10.000Z",
+      "runCount": 7,
+      "version": 31,
+      "hash": "07467E92",
+      "filesLoaded": 2,
+      "volumeDevice": "\\DEVICE\\HARDDISKVOLUME3",
+      "volumeSerial": "A1B2C3D4",
+      "volumeCreated": "2023-01-05T09:00:00.000Z",
+      "offset": 136
+    }
+  ],
+  "NOTEPAD.EXE-MAMTEST.pf": [
+    {
+      "executable": "NOTEPAD.EXE",
+      "runTime": "2024-03-01T08:15:00.000Z",
+      "runCount": 7,
+      "version": 31,
+      "hash": "07467E92",
+      "filesLoaded": 2,
+      "volumeDevice": "\\DEVICE\\HARDDISKVOLUME3",
+      "volumeSerial": "A1B2C3D4",
+      "volumeCreated": "2023-01-05T09:00:00.000Z",
+      "offset": 128
+    },
+    {
+      "executable": "NOTEPAD.EXE",
+      "runTime": "2024-02-28T17:42:10.000Z",
+      "runCount": 7,
+      "version": 31,
+      "hash": "07467E92",
+      "filesLoaded": 2,
+      "volumeDevice": "\\DEVICE\\HARDDISKVOLUME3",
+      "volumeSerial": "A1B2C3D4",
+      "volumeCreated": "2023-01-05T09:00:00.000Z",
+      "offset": 136
+    }
+  ]
+}

@@ -152,17 +152,21 @@ export const lnk: Parser = {
               driveSerialStr = serial.toString(16).toUpperCase().padStart(8, '0');
               const volumeLabelOffset = new DataView(volIdBuf.buffer, volIdBuf.byteOffset + 12, 4).getUint32(0, true);
 
-              // Volume label at VolumeID + VolumeLabelOffset
-              const volLabelAbs = volIdAbs + volumeLabelOffset;
+              let actualVolLabelOffset = volumeLabelOffset;
+              let volLabelIsUtf16 = false;
+              if (volumeLabelOffset === 0x14 && volIdBuf.length >= 20) {
+                actualVolLabelOffset = new DataView(volIdBuf.buffer, volIdBuf.byteOffset + 16, 4).getUint32(0, true);
+                volLabelIsUtf16 = true;
+              }
+
+              // Volume label at VolumeID + actualVolLabelOffset
+              const volLabelAbs = volIdAbs + actualVolLabelOffset;
               const volLabelBuf = await reader.bytes(volLabelAbs, Math.min(64, reader.size - volLabelAbs));
               if (volLabelBuf.length > 0) {
-                // Volume label is NUL-terminated ASCII or UTF-16LE
-                if (volLabelBuf[1] === 0 || volLabelBuf[1] === undefined) {
-                  // ASCII
-                  volumeLabelStr = readNulTerminatedAscii(volLabelBuf, 0, volLabelBuf.length);
-                } else {
-                  // UTF-16LE
+                if (volLabelIsUtf16) {
                   volumeLabelStr = readNulTerminatedUtf16(volLabelBuf, 0, volLabelBuf.length);
+                } else {
+                  volumeLabelStr = readNulTerminatedAscii(volLabelBuf, 0, volLabelBuf.length);
                 }
               }
             }
@@ -210,7 +214,7 @@ export const lnk: Parser = {
         return null;
       }
       const strBuf = await reader.bytes(pos, byteCount);
-      pos += byteCount;
+      pos += isUnicodeFlag ? charCount * 2 : byteCount;
       if (isUnicodeFlag) {
         return readNulTerminatedUtf16(strBuf, 0, strBuf.length);
       } else {

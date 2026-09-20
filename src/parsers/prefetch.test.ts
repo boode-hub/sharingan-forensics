@@ -111,9 +111,11 @@ describe.skipIf(!existsSync(REAL_PF))('real Windows 11 Prefetch', () => {
     expect(rows[0].version).toBe(31);
     expect(rows[0].runCount).toBeGreaterThan(0);
 
+    // Windows does not keep the eight run-time slots strictly ordered — a real
+    // file here had 11:03:52.589 followed by 11:03:53.184 — so assert only that
+    // every slot holds a plausible date, not that they descend.
     const times = rows.map((r) => (r.runTime as Date).getTime());
-    expect(times).toEqual([...times].sort((a, b) => b - a));
-    expect(times.every((t) => t > Date.parse('2000-01-01'))).toBe(true);
+    expect(times.every((t) => t > Date.parse('2000-01-01') && t < Date.now() + 864e5)).toBe(true);
 
     // The multi-chunk caveat must be surfaced, never silently swallowed.
     expect(warnings.some((w) => w.message.includes('must not be relied on'))).toBe(true);

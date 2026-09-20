@@ -255,6 +255,40 @@ main {
   margin-left: 4px;
   font-size: 9px;
 }
+.grid-filters {
+  display: flex;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.grid-filters .cell {
+  border-bottom: 0;
+  padding: 2px 4px;
+}
+.grid-filters input {
+  width: 100%;
+  min-width: 0;
+  padding: 2px 5px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.grid-filters input:focus {
+  outline: 1px solid var(--accent);
+}
+.grid-filters input:not(:placeholder-shown) {
+  border-color: var(--accent);
+}
+.clearf {
+  width: 100%;
+  background: none;
+  border: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 11px;
+}
+
 .grid-scroll {
   flex: 1;
   overflow: auto;

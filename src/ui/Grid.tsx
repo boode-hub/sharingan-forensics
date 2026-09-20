@@ -16,6 +16,62 @@ function compare(a: unknown, b: unknown): number {
   return fmt(a).localeCompare(fmt(b), undefined, { numeric: true });
 }
 
+/**
+ * Matches one cell against one column filter expression.
+ *
+ * Plain text is a case-insensitive substring match, which is what an analyst
+ * reaches for most of the time. The operators exist because substring alone
+ * cannot express the two questions forensics actually asks of a large table:
+ * "only this window of time" and "only these ids".
+ *
+ *   4624          contains "4624"
+ *   !svchost      does NOT contain "svchost"
+ *   >=2019-02-13  on or after that instant — dates compare as time, not text
+ *   <100          numerically less than 100
+ *   =4624         exactly equal, so 4624 does not also match 14624
+ */
+export function matches(value: unknown, expr: string): boolean {
+  const e = expr.trim();
+  if (!e) return true;
+  if (e.startsWith('!')) return !matches(value, e.slice(1));
+
+  const op = /^(>=|<=|>|<|=)(.*)$/.exec(e);
+  if (!op) return fmt(value).toLowerCase().includes(e.toLowerCase());
+
+  const [, operator, raw] = op;
+  const operand = raw.trim();
+  if (!operand) return true;
+
+  // Compare as time when the cell is a date and as number when both sides are
+  // numeric; fall back to text so the operators still behave sensibly on
+  // strings rather than silently matching nothing.
+  let a: number | string;
+  let b: number | string;
+  if (value instanceof Date) {
+    // Cells are displayed as ISO UTC, so a bare "2019-02-13T15:00" must mean
+    // 15:00 UTC too. JavaScript would otherwise read a date-time with no zone
+    // as LOCAL time, so the same text would select a different set of events
+    // depending on the analyst's machine — unacceptable in forensic output.
+    const hasZone = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(operand);
+    const t = Date.parse(hasZone || !operand.includes('T') ? operand : `${operand}Z`);
+    if (Number.isNaN(t)) return false;
+    a = value.getTime();
+    b = t;
+  } else if (typeof value === 'number' && operand !== '' && !Number.isNaN(Number(operand))) {
+    a = value;
+    b = Number(operand);
+  } else {
+    a = fmt(value).toLowerCase();
+    b = operand.toLowerCase();
+  }
+
+  if (operator === '=') return a === b;
+  if (operator === '>') return a > b;
+  if (operator === '<') return a < b;
+  if (operator === '>=') return a >= b;
+  return a <= b;
+}
+
 export function Grid({
   columns,
   rows,
@@ -29,22 +85,32 @@ export function Grid({
 }) {
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 } | null>(null);
   const [active, setActive] = useState(-1);
+  const [colFilters, setColFilters] = useState<Record<string, string>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const visible = useMemo(() => columns.filter((c) => !c.secondary), [columns]);
 
+  const activeCols = useMemo(
+    () => Object.entries(colFilters).filter(([, v]) => v.trim()),
+    [colFilters],
+  );
+
   const view = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    // Substring match across every column, including hidden ones — an analyst
-    // searching for a path should not have to know which column holds it.
+    // The global box matches across every column, including hidden ones — an
+    // analyst searching for a path should not have to know which column holds
+    // it. Per-column filters then narrow that, ANDed together.
     let out = q
       ? rows.filter((r) => columns.some((c) => fmt(r[c.key]).toLowerCase().includes(q)))
       : rows;
+    if (activeCols.length) {
+      out = out.filter((r) => activeCols.every(([key, expr]) => matches(r[key], expr)));
+    }
     if (sort) {
       out = [...out].sort((a, b) => compare(a[sort.key], b[sort.key]) * sort.dir);
     }
     return out;
-  }, [rows, columns, filter, sort]);
+  }, [rows, columns, filter, sort, activeCols]);
 
   const virt = useVirtualizer({
     count: view.length,
@@ -85,6 +151,26 @@ export function Grid({
         ))}
       </div>
 
+      <div className="grid-filters">
+        <div className="cell idx" title="Clear all column filters">
+          {activeCols.length > 0 && (
+            <button type="button" className="clearf" onClick={() => setColFilters({})}>
+              ✕
+            </button>
+          )}
+        </div>
+        {visible.map((c) => (
+          <div className="cell" key={c.key}>
+            <input
+              value={colFilters[c.key] ?? ''}
+              placeholder={c.type === 'date' ? '>=2019-02-13' : c.type === 'num' ? '=4624' : 'filter'}
+              title={`Filter ${c.label}. Plain text matches a substring; ! negates; = > < >= <= compare, and dates compare as time.`}
+              onChange={(e) => setColFilters((f) => ({ ...f, [c.key]: e.target.value }))}
+            />
+          </div>
+        ))}
+      </div>
+
       <div className="grid-scroll" ref={scrollRef}>
         <div style={{ height: virt.getTotalSize(), position: 'relative' }}>
           {virt.getVirtualItems().map((vi) => {
@@ -117,7 +203,15 @@ export function Grid({
 
       <div className="grid-foot">
         {view.length.toLocaleString()} of {rows.length.toLocaleString()} rows
-        {filter.trim() && ' (filtered)'}
+        {(filter.trim() || activeCols.length > 0) && (
+          <>
+            {' '}
+            (filtered
+            {activeCols.length > 0 &&
+              ` on ${activeCols.map(([k]) => columns.find((c) => c.key === k)?.label ?? k).join(', ')}`}
+            )
+          </>
+        )}
       </div>
     </div>
   );

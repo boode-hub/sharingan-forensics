@@ -1,0 +1,28 @@
+{
+  "Synthetic.evtx": [
+    {
+      "recordId": 1,
+      "writtenTime": "2024-05-01T10:00:00.000Z",
+      "chunkNumber": 0,
+      "recordSize": 41,
+      "dataLength": 13,
+      "offset": 4608
+    },
+    {
+      "recordId": 2,
+      "writtenTime": "2024-05-01T10:00:05.000Z",
+      "chunkNumber": 0,
+      "recordSize": 41,
+      "dataLength": 13,
+      "offset": 4649
+    },
+    {
+      "recordId": 3,
+      "writtenTime": "2024-05-02T23:59:59.000Z",
+      "chunkNumber": 0,
+      "recordSize": 43,
+      "dataLength": 15,
+      "offset": 4690
+    }
+  ]
+}

@@ -568,4 +568,188 @@ describe('evtx parser', () => {
       expect(outcome.rows[0].chunkNumber).toBe(1);
     });
   });
+
+  describe('inline template definition substitutions (regression)', () => {
+    it('decodes substituted values for record defining inline template and subsequent record reusing it', async () => {
+      const strings = [
+        { offset: 3000, str: 'Event' },
+        { offset: 3050, str: 'System' },
+        { offset: 3100, str: 'Provider' },
+        { offset: 3150, str: 'Name' },
+        { offset: 3200, str: 'EventID' },
+        { offset: 3250, str: 'EventData' },
+        { offset: 3300, str: 'Data' },
+      ];
+
+      // Top-level template: <Event><System><Provider Name="%0"/><EventID>%1</EventID></System>%2</Event>
+      const tw = new BufferWriter();
+      tw.u8(TOKEN_START_STREAM).u8(1).u8(1).u8(0);
+      tw.u8(TOKEN_OPEN_START_ELEMENT).i16(-1);
+      const eventSizePos = tw.pos;
+      tw.u32(0).u32(3000).u8(TOKEN_CLOSE_START_ELEMENT);
+
+      // <System>
+      tw.u8(TOKEN_OPEN_START_ELEMENT).i16(-1);
+      const sysSizePos = tw.pos;
+      tw.u32(0).u32(3050).u8(TOKEN_CLOSE_START_ELEMENT);
+
+      // <Provider Name="%0"/>
+      tw.u8(TOKEN_OPEN_START_ELEMENT_ATTR).i16(-1);
+      const provSizePos = tw.pos;
+      tw.u32(0).u32(3100);
+      const provAttrPos = tw.pos;
+      tw.u32(0).u8(TOKEN_ATTRIBUTE).u32(3150).u8(TOKEN_NORMAL_SUBSTITUTION).u16(0).u8(1);
+      new DataView(tw.buf.buffer, tw.buf.byteOffset).setUint32(provAttrPos, tw.pos - (provAttrPos + 4), true);
+      tw.u8(TOKEN_CLOSE_EMPTY_ELEMENT);
+      new DataView(tw.buf.buffer, tw.buf.byteOffset).setUint32(provSizePos, tw.pos - (provSizePos + 4), true);
+
+      // <EventID>%1</EventID>
+      tw.u8(TOKEN_OPEN_START_ELEMENT).i16(-1);
+      const idSizePos = tw.pos;
+      tw.u32(0).u32(3200).u8(TOKEN_CLOSE_START_ELEMENT).u8(TOKEN_NORMAL_SUBSTITUTION).u16(1).u8(8).u8(TOKEN_END_ELEMENT);
+      new DataView(tw.buf.buffer, tw.buf.byteOffset).setUint32(idSizePos, tw.pos - (idSizePos + 4), true);
+
+      tw.u8(TOKEN_END_ELEMENT); // </System>
+      new DataView(tw.buf.buffer, tw.buf.byteOffset).setUint32(sysSizePos, tw.pos - (sysSizePos + 4), true);
+
+      // Sub 2: BinXmlType (<EventData>)
+      tw.u8(TOKEN_NORMAL_SUBSTITUTION).u16(2).u8(0x21);
+
+      tw.u8(TOKEN_END_ELEMENT); // </Event>
+      new DataView(tw.buf.buffer, tw.buf.byteOffset).setUint32(eventSizePos, tw.pos - (eventSizePos + 4), true);
+      tw.u8(TOKEN_EOF);
+      const topTemplateXml = tw.result();
+
+      // Nested template for EventData: <EventData><Data Name="%0">%1</Data></EventData>
+      const edw = new BufferWriter();
+      edw.u8(TOKEN_START_STREAM).u8(1).u8(1).u8(0);
+      edw.u8(TOKEN_OPEN_START_ELEMENT).i16(-1);
+      const edSizePos = edw.pos;
+      edw.u32(0).u32(3250).u8(TOKEN_CLOSE_START_ELEMENT);
+
+      // <Data Name="%0">%1</Data>
+      edw.u8(TOKEN_OPEN_START_ELEMENT_ATTR).i16(-1);
+      const dSizePos = edw.pos;
+      edw.u32(0).u32(3300);
+      const dAttrPos = edw.pos;
+      edw.u32(0).u8(TOKEN_ATTRIBUTE).u32(3150).u8(TOKEN_NORMAL_SUBSTITUTION).u16(0).u8(1);
+      new DataView(edw.buf.buffer, edw.buf.byteOffset).setUint32(dAttrPos, edw.pos - (dAttrPos + 4), true);
+      edw.u8(TOKEN_CLOSE_START_ELEMENT).u8(TOKEN_NORMAL_SUBSTITUTION).u16(1).u8(1).u8(TOKEN_END_ELEMENT);
+      new DataView(edw.buf.buffer, edw.buf.byteOffset).setUint32(dSizePos, edw.pos - (dSizePos + 4), true);
+
+      edw.u8(TOKEN_END_ELEMENT); // </EventData>
+      new DataView(edw.buf.buffer, edw.buf.byteOffset).setUint32(edSizePos, edw.pos - (edSizePos + 4), true);
+      edw.u8(TOKEN_EOF);
+      const eventDataTemplateXml = edw.result();
+
+      // Construct Record 1 (carries inline template definitions)
+      const pw1 = new BufferWriter();
+      pw1.u8(TOKEN_START_STREAM).u8(1).u8(1).u8(0);
+      pw1.u8(TOKEN_TEMPLATE_INSTANCE);
+      pw1.u8(1).i32(1);
+      const topTemplateOffset = 536 + pw1.pos;
+      pw1.u32(topTemplateOffset);
+      pw1.i32(0);
+      pw1.bytes(new Uint8Array(16));
+      pw1.i32(topTemplateXml.length);
+      pw1.bytes(topTemplateXml);
+
+      const provBytes = Buffer.from('Microsoft-Windows-Windows Defender\0', 'utf16le');
+      const idBytes = Buffer.alloc(4);
+      idBytes.writeUInt32LE(1126);
+
+      // Build nested EventData payload for Record 1 (INLINE template definition)
+      const nested1StartInPw1 = pw1.pos + 4 + 12 + provBytes.length + idBytes.length;
+      const eventDataTemplateOffset = 536 + nested1StartInPw1 + 10;
+
+      const nested1 = new BufferWriter();
+      nested1.u8(TOKEN_START_STREAM).u8(1).u8(1).u8(0);
+      nested1.u8(TOKEN_TEMPLATE_INSTANCE);
+      nested1.u8(1).i32(2);
+      nested1.u32(eventDataTemplateOffset);
+      nested1.i32(0);
+      nested1.bytes(new Uint8Array(16));
+      nested1.i32(eventDataTemplateXml.length);
+      nested1.bytes(eventDataTemplateXml);
+
+      const attrValBytes = Buffer.from('Product Name\0', 'utf16le');
+      const dataValBytes = Buffer.from('Microsoft Defender Antivirus\0', 'utf16le');
+      nested1.u32(2);
+      nested1.u16(attrValBytes.length).u16(1);
+      nested1.u16(dataValBytes.length).u16(1);
+      nested1.bytes(attrValBytes);
+      nested1.bytes(dataValBytes);
+      nested1.u8(TOKEN_EOF);
+
+      const nested1Bytes = nested1.result();
+
+      pw1.u32(3);
+      pw1.u16(provBytes.length).u16(1);
+      pw1.u16(idBytes.length).u16(8);
+      pw1.u16(nested1Bytes.length).u16(0x21);
+      pw1.bytes(provBytes);
+      pw1.bytes(idBytes);
+      pw1.bytes(nested1Bytes);
+      pw1.u8(TOKEN_EOF);
+
+      const rec1 = makeRecord(1, pw1.result());
+
+      // Record 2: references cached top-level template and cached nested template
+      const pw2 = new BufferWriter();
+      pw2.u8(TOKEN_START_STREAM).u8(1).u8(1).u8(0);
+      pw2.u8(TOKEN_TEMPLATE_INSTANCE);
+      pw2.u8(1).i32(1).u32(topTemplateOffset);
+
+      const nested2 = new BufferWriter();
+      nested2.u8(TOKEN_START_STREAM).u8(1).u8(1).u8(0);
+      nested2.u8(TOKEN_TEMPLATE_INSTANCE);
+      nested2.u8(1).i32(2).u32(eventDataTemplateOffset);
+
+      const dataVal2Bytes = Buffer.from('Microsoft Defender Antivirus Updated\0', 'utf16le');
+      nested2.u32(2);
+      nested2.u16(attrValBytes.length).u16(1);
+      nested2.u16(dataVal2Bytes.length).u16(1);
+      nested2.bytes(attrValBytes);
+      nested2.bytes(dataVal2Bytes);
+      nested2.u8(TOKEN_EOF);
+
+      const nested2Bytes = nested2.result();
+
+      pw2.u32(3);
+      pw2.u16(provBytes.length).u16(1);
+      pw2.u16(idBytes.length).u16(8);
+      pw2.u16(nested2Bytes.length).u16(0x21);
+      pw2.bytes(provBytes);
+      pw2.bytes(idBytes);
+      pw2.bytes(nested2Bytes);
+      pw2.u8(TOKEN_EOF);
+
+      const rec2 = makeRecord(2, pw2.result());
+
+      const evtxBytes = makeSyntheticEvtxFile([rec1, rec2], strings);
+      const reader = bufReader(evtxBytes, 'regression-inline-template.evtx');
+      const outcome = await run(evtx, reader);
+
+      expect(outcome.warnings).toEqual([]);
+      expect(outcome.rows.length).toBe(2);
+
+      const row1 = outcome.rows[0];
+      expect(row1.recordId).toBe(1);
+      expect(row1.eventId).toBe(1126);
+      expect(row1.provider).toBe('Microsoft-Windows-Windows Defender');
+      expect(row1.xml).toContain('<Data Name="Product Name">Microsoft Defender Antivirus</Data>');
+      expect(row1.payload).toBeTruthy();
+      const payload1 = JSON.parse(row1.payload as string);
+      expect(payload1['Product Name']).toBe('Microsoft Defender Antivirus');
+
+      const row2 = outcome.rows[1];
+      expect(row2.recordId).toBe(2);
+      expect(row2.eventId).toBe(1126);
+      expect(row2.provider).toBe('Microsoft-Windows-Windows Defender');
+      expect(row2.xml).toContain('<Data Name="Product Name">Microsoft Defender Antivirus Updated</Data>');
+      expect(row2.payload).toBeTruthy();
+      const payload2 = JSON.parse(row2.payload as string);
+      expect(payload2['Product Name']).toBe('Microsoft Defender Antivirus Updated');
+    });
+  });
 });

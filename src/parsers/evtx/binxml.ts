@@ -406,6 +406,7 @@ export function formatSubstitutionValue(
   chunk: Uint8Array,
   cache: ChunkCache,
   depth = 0,
+  recordChunkOffset = 0,
 ): string {
   if (depth > 20) return '';
   const d = sub.data;
@@ -473,7 +474,7 @@ export function formatSubstitutionValue(
         : '';
     case 0x21: {
       // BinXmlType
-      return decodeNestedBinXml(d, chunk, cache, depth + 1);
+      return decodeNestedBinXml(d, chunk, cache, depth + 1, recordChunkOffset);
     }
     case 0x81: {
       // ArrayUnicodeString
@@ -639,6 +640,7 @@ function decodeNestedBinXml(
   chunk: Uint8Array,
   cache: ChunkCache,
   depth: number,
+  recordChunkOffset = 0,
 ): string {
   if (depth > 20 || data.length === 0) return '';
   const cursor = new Cursor(data, 0);
@@ -661,23 +663,67 @@ function decodeNestedBinXml(
         template = cache.getTemplate(tOff, depth + 1) ?? undefined;
       }
 
+      // Check if template definition is inline or cached:
+      // In Eric Zimmerman's evtx (TemplateInstance.cs), if templateOffset < recordPosition,
+      // the template is cached and the substitution array follows immediately.
+      // Otherwise, the template definition is inline: skip NextTemplateOffset (4) + GUID (16) + length (4),
+      // and skip the template definition body bytes (using template.size) to position at the substitution array.
+      const isCached =
+        recordChunkOffset > 0
+          ? tOff < recordChunkOffset
+          : template
+            ? cursor.remaining < 24 + template.size ||
+              new DataView(data.buffer, data.byteOffset + cursor.pos).getInt32(20, true) !== template.size
+            : false;
+
+      if (!isCached) {
+        const nextTemplateOffset = cursor.i32();
+        const templateGuid = cursor.guid();
+        const dataSize = cursor.i32();
+        if (dataSize < 0 || cursor.remaining < dataSize) {
+          throw new Error(`invalid inline template size: ${dataSize}`);
+        }
+        if (template) {
+          cursor.skip(template.size);
+        } else {
+          const templatePayload = cursor.take(dataSize);
+          const nodes = parseTemplateBytes(templatePayload, tOff, cache, depth + 1);
+          template = {
+            templateId: 0,
+            templateOffset: tOff,
+            guid: templateGuid,
+            size: dataSize,
+            nodes,
+            nextTemplateOffset,
+          };
+          cache.templates.set(tOff, template);
+        }
+      }
+
       const subCount = cursor.u32();
+      if (subCount > 10000 || cursor.remaining < subCount * 4) {
+        throw new Error(`implausible substitution count: ${subCount}`);
+      }
       const descriptors: { size: number; type: number }[] = [];
       for (let i = 0; i < subCount; i++) {
         descriptors.push({ size: cursor.u16(), type: cursor.u16() });
       }
       const subs: SubstitutionEntry[] = [];
       for (let i = 0; i < subCount; i++) {
+        const d = descriptors[i];
+        if (cursor.remaining < d.size) {
+          throw new Error('substitution data runs past payload end');
+        }
         subs.push({
           index: i,
-          size: descriptors[i].size,
-          type: descriptors[i].type,
-          data: cursor.take(descriptors[i].size),
+          size: d.size,
+          type: d.type,
+          data: cursor.take(d.size),
         });
       }
 
       if (template) {
-        out += renderTemplateXml(template.nodes, subs, chunk, cache, depth + 1);
+        out += renderTemplateXml(template.nodes, subs, chunk, cache, depth + 1, recordChunkOffset);
       }
     }
   }
@@ -690,6 +736,7 @@ export function renderTemplateXml(
   chunk: Uint8Array,
   cache: ChunkCache,
   depth = 0,
+  recordChunkOffset = 0,
 ): string {
   if (depth > 20) return '';
   let sb = '';
@@ -709,7 +756,7 @@ export function renderTemplateXml(
               // NullType optional attribute is omitted
               continue;
             }
-            const val = formatSubstitutionValue(sub, chunk, cache, depth + 1);
+            const val = formatSubstitutionValue(sub, chunk, cache, depth + 1, recordChunkOffset);
             attrStrs.push(`${attr.name}="${escapeXmlAttr(val)}"`);
           }
         }
@@ -723,7 +770,7 @@ export function renderTemplateXml(
         sb += '/>';
       } else {
         sb += '>';
-        sb += renderTemplateXml(node.children, substitutions, chunk, cache, depth + 1);
+        sb += renderTemplateXml(node.children, substitutions, chunk, cache, depth + 1, recordChunkOffset);
         sb += `</${node.name}>`;
       }
     } else if (node.type === 'text') {
@@ -734,9 +781,9 @@ export function renderTemplateXml(
         if (node.optional && sub.type === 0x00) {
           // Omit optional null element content
         } else if (sub.type === 0x21) {
-          sb += formatSubstitutionValue(sub, chunk, cache, depth + 1);
+          sb += formatSubstitutionValue(sub, chunk, cache, depth + 1, recordChunkOffset);
         } else {
-          sb += escapeXmlText(formatSubstitutionValue(sub, chunk, cache, depth + 1));
+          sb += escapeXmlText(formatSubstitutionValue(sub, chunk, cache, depth + 1, recordChunkOffset));
         }
       }
     } else if (node.type === 'cdata') {
@@ -991,18 +1038,26 @@ export function decodeRecordBinXml(
         if (dataSize < 0 || cursor.remaining < dataSize) {
           throw new Error(`invalid inline template size: ${dataSize}`);
         }
-        const templatePayload = cursor.take(dataSize);
-        const templatePosInChunk = recordChunkOffset + cursor.pos - dataSize;
-        const nodes = parseTemplateBytes(templatePayload, templatePosInChunk, cache, 0);
-        template = {
-          templateId: 0,
-          templateOffset,
-          guid: templateGuid,
-          size: dataSize,
-          nodes,
-          nextTemplateOffset,
-        };
-        cache.templates.set(templateOffset, template);
+        template = cache.templates.get(templateOffset);
+        if (!template) {
+          template = cache.getTemplate(templateOffset, 0) ?? undefined;
+        }
+        if (template) {
+          cursor.skip(template.size);
+        } else {
+          const templatePayload = cursor.take(dataSize);
+          const templatePosInChunk = recordChunkOffset + cursor.pos - dataSize;
+          const nodes = parseTemplateBytes(templatePayload, templatePosInChunk, cache, 0);
+          template = {
+            templateId: 0,
+            templateOffset,
+            guid: templateGuid,
+            size: dataSize,
+            nodes,
+            nextTemplateOffset,
+          };
+          cache.templates.set(templateOffset, template);
+        }
       }
 
       if (!template) {
@@ -1033,11 +1088,11 @@ export function decodeRecordBinXml(
         });
       }
 
-      fullXml += renderTemplateXml(template.nodes, substitutions, chunk, cache, 0);
+      fullXml += renderTemplateXml(template.nodes, substitutions, chunk, cache, 0, recordChunkOffset);
     } else if (tag === TOKEN_OPEN_START_ELEMENT || tag === TOKEN_OPEN_START_ELEMENT_ATTR) {
       const elem = parseElement(cursor, tag, recordChunkOffset, cache, 0);
       if (elem) {
-        fullXml += renderTemplateXml([elem], [], chunk, cache, 0);
+        fullXml += renderTemplateXml([elem], [], chunk, cache, 0, recordChunkOffset);
       }
     } else {
       throw new Error(`unexpected BinXML tag: 0x${tag.toString(16)}`);

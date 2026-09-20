@@ -87,11 +87,14 @@ export function Grid({
   columns,
   rows,
   filter,
+  partial,
   onSelect,
 }: {
   columns: Column[];
   rows: Row[];
   filter: string;
+  /** The parser stopped early, so these rows are not the whole artifact. */
+  partial?: boolean;
   onSelect: (r: Row) => void;
 }) {
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 } | null>(null);
@@ -274,7 +277,13 @@ export function Grid({
         {rows.length.toLocaleString()} rows
         {filtered
           ? ` — filtered${activeCols.length ? ` on ${activeCols.map(([k]) => columns.find((c) => c.key === k)?.label ?? k).join(', ')}` : ''}`
-          : ' — everything in the file'}
+          : partial
+            ? ''
+            : ' — everything in the file'}
+        {/* Never let the footer imply completeness when the parse stopped
+            early. An analyst reading "everything in the file" over a truncated
+            artifact is worse than showing nothing at all. */}
+        {partial && <span className="partial"> — PARTIAL, not the whole artifact: see warnings above</span>}
         {hidden.size > 0 && ` · ${hidden.size} column${hidden.size > 1 ? 's' : ''} hidden`}
       </div>
     </div>

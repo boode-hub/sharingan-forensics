@@ -412,6 +412,10 @@ main {
   color: var(--dim);
   font-size: 12px;
 }
+.grid-foot .partial {
+  color: var(--warn);
+  font-weight: 600;
+}
 .grid-foot strong {
   color: var(--fg);
 }

@@ -192,6 +192,12 @@ export default function App() {
                 columns={current.parser.columns}
                 rows={current.rows}
                 filter={filter}
+                // A parser that stopped early says so in a warning. Surface
+                // that in the footer too, so completeness is never implied
+                // over a truncated artifact.
+                partial={current.warnings?.some((w) =>
+                  /partial|cap |cancelled|truncat/i.test(w.message),
+                )}
                 onSelect={setRow}
               />
 

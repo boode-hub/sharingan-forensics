@@ -24,7 +24,7 @@ function basename(path: string): string {
 }
 
 function driveLetterFromNumber(driveNum: number): string | null {
-  if (driveNum < 0 || driveNum > 25) return null;
+  if (driveNum > 25) return null;
   return String.fromCharCode(65 + driveNum) + ':';
 }
 
@@ -107,7 +107,6 @@ async function* parseInfo2(reader: Reader, ctx: Ctx): AsyncGenerator<Row> {
   }
 
   let offset = 16;
-  let recordIdx = 0;
 
   while (true) {
     if (ctx.signal?.aborted) break;
@@ -146,12 +145,11 @@ async function* parseInfo2(reader: Reader, ctx: Ctx): AsyncGenerator<Row> {
       fileName: basename(originalPath),
       fileSize: Number(fileSize),
       deletedOn,
-      recordIndex: idx || null,
+      recordIndex: idx,
       driveLetter: driveLetterFromNumber(driveNum),
       offset
     };
 
-    recordIdx++;
     offset += recordSize;
 
     if (recordBuf.length < recordSize) break;
@@ -160,7 +158,7 @@ async function* parseInfo2(reader: Reader, ctx: Ctx): AsyncGenerator<Row> {
 
 function sniffDollarI(head: Uint8Array, filename: string): boolean {
   const name = filename.toLowerCase();
-  if (name.includes('$i')) return true;
+  if (name.startsWith('$i')) return true;
 
   if (head.length < 28) return false;
   const c = new Cursor(head);
@@ -186,14 +184,15 @@ export const recycleBin: Parser = {
   id: 'recyclebin',
   name: 'Recycle Bin',
   ezTool: 'RBCmd',
-  extensions: ['.$i', '.info2'],
+  extensions: [],
   columns,
   sniff(head: Uint8Array, filename: string): boolean {
     return sniffDollarI(head, filename) || sniffInfo2(head, filename);
   },
   async *parse(reader: Reader, ctx: Ctx): AsyncGenerator<Row> {
     const name = reader.name.toLowerCase();
-    if (name.startsWith('$i')) {
+    const head = await reader.bytes(0, 28);
+    if (sniffDollarI(head, name)) {
       yield* parseDollarI(reader, ctx);
     } else {
       yield* parseInfo2(reader, ctx);

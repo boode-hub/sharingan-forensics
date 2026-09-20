@@ -51,6 +51,11 @@ export function Grid({
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_H,
     overscan: 20,
+    // The scroll element measures 0 until a ResizeObserver fires, which never
+    // happens on a page that has not painted yet. Without a non-zero starting
+    // rect the grid renders an empty body while the footer reports the real
+    // row count. Assume a screenful up front; the observer corrects it.
+    initialRect: { width: 1200, height: 800 },
   });
 
   const toggle = (key: string) =>
@@ -58,55 +63,54 @@ export function Grid({
 
   return (
     <div className="grid">
-      <div className="grid-scroll" ref={scrollRef}>
-        <table style={{ width: '100%' }}>
-          <thead>
-            <tr>
-              <th className="num" style={{ width: 64 }}>
-                #
-              </th>
-              {visible.map((c) => (
-                <th
-                  key={c.key}
-                  onClick={() => toggle(c.key)}
-                  title={`Sort by ${c.label}`}
-                  aria-sort={
-                    sort?.key === c.key ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'
-                  }
-                >
-                  {c.label}
-                  <span className="sort">
-                    {sort?.key === c.key ? (sort.dir === 1 ? '▲' : '▼') : ''}
-                  </span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody style={{ height: virt.getTotalSize(), position: 'relative' }}>
-            {virt.getVirtualItems().map((vi) => {
-              const r = view[vi.index];
-              return (
-                <tr
-                  key={vi.key}
-                  className={vi.index === active ? 'on' : ''}
-                  style={{ position: 'absolute', top: vi.start, height: ROW_H, width: '100%' }}
-                  onClick={() => {
-                    setActive(vi.index);
-                    onSelect(r);
-                  }}
-                >
-                  <td className="num idx">{vi.index + 1}</td>
-                  {visible.map((c) => (
-                    <td key={c.key} className={c.type === 'num' ? 'num' : undefined}>
-                      {fmt(r[c.key])}
-                    </td>
-                  ))}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div className="grid-head">
+        <div className="cell idx">#</div>
+        {visible.map((c) => (
+          <button
+            type="button"
+            key={c.key}
+            className="cell th"
+            onClick={() => toggle(c.key)}
+            title={`Sort by ${c.label}`}
+          >
+            {c.label}
+            <span className="sort">
+              {sort?.key === c.key ? (sort.dir === 1 ? '▲' : '▼') : ''}
+            </span>
+          </button>
+        ))}
       </div>
+
+      <div className="grid-scroll" ref={scrollRef}>
+        <div style={{ height: virt.getTotalSize(), position: 'relative' }}>
+          {virt.getVirtualItems().map((vi) => {
+            const r = view[vi.index];
+            return (
+              <div
+                key={vi.key}
+                className={`grid-row${vi.index === active ? ' on' : ''}`}
+                style={{ transform: `translateY(${vi.start}px)`, height: ROW_H }}
+                onClick={() => {
+                  setActive(vi.index);
+                  onSelect(r);
+                }}
+              >
+                <div className="cell idx">{vi.index + 1}</div>
+                {visible.map((c) => (
+                  <div
+                    key={c.key}
+                    className={`cell${c.type === 'num' ? ' num' : ''}`}
+                    title={fmt(r[c.key])}
+                  >
+                    {fmt(r[c.key])}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="grid-foot">
         {view.length.toLocaleString()} of {rows.length.toLocaleString()} rows
         {filter.trim() && ' (filtered)'}

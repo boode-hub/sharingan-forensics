@@ -32,6 +32,7 @@ describe('recyclebin parser', () => {
   const expected = loadExpected();
 
   for (const [name, expRows] of Object.entries(expected)) {
+    if (name === '_comment') continue;
     it(`parses ${name} correctly`, async () => {
       const buf = loadFixture(name);
       const reader = bufReader(buf, name);
@@ -43,6 +44,7 @@ describe('recyclebin parser', () => {
 
   describe('truncation tests', () => {
     for (const name of Object.keys(expected)) {
+      if (name === '_comment') continue;
       it(`does not throw on truncated ${name}`, async () => {
         const buf = loadFixture(name);
         const lengths = [10, 30, Math.floor(buf.length / 2)];

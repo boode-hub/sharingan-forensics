@@ -1,32 +1,54 @@
-# React + TypeScript + Vite
+# Sharingan Forensics
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Windows forensic artifact parsing in the browser. Drop in a `$I`, a Prefetch
+file, a `.lnk`, a registry hive or an `.evtx`, and read it as a table.
 
-Currently, two official plugins are available:
+**Nothing is uploaded.** There is no backend and no network call anywhere in the
+shipped code — CI fails the build if one appears. Every byte is parsed in your
+own tab, which is what makes it usable on evidence at all.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+This is a browser replacement for the [Eric Zimmerman
+toolset](https://ericzimmerman.github.io/). See [SPEC.md](SPEC.md) for the full
+tool-by-tool coverage table and the phase plan.
 
-## React Compiler
+## Status
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Early. The foundation, the app shell and the first parser are in; most of the
+suite is not. The coverage table in SPEC.md is the honest list of what works.
 
-## Expanding the Oxlint configuration
+| | |
+|---|---|
+| Recycle Bin (`$I`, `INFO2`) — RBCmd | in review |
+| Everything else | see SPEC.md |
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+## Running it
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm ci && npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+```bash
+npm run typecheck && npm test
+```
+
+## How it is built
+
+Parsers are plain objects implementing the `Parser` contract in
+[`src/core/types.ts`](src/core/types.ts) — an async generator that yields rows
+and reports problems through `ctx.warn()` instead of throwing. Malformed
+evidence is the normal case, so a parser that hits a corrupt record emits
+everything it recovered and names what it could not. Parsing runs in a Web
+Worker against a streaming `Reader`, so a multi-gigabyte `$MFT` never has to fit
+in memory.
+
+Test fixtures are **generated from the documented on-disk layout** by a
+`make.mjs` beside each sample, deliberately written independently of the parser.
+The fixture is the oracle: a parser that agrees with it is agreeing with the
+format rather than with itself. CI regenerates the fixtures and fails if the
+committed bytes drift.
+
+Contributor rules are in [AGENTS.md](AGENTS.md).
+
+## Licence
+
+MIT. Not affiliated with or endorsed by Eric Zimmerman.

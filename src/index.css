@@ -232,28 +232,22 @@ main {
   display: flex;
   flex-direction: column;
 }
-.grid-scroll {
-  flex: 1;
-  overflow: auto;
-}
-.grid table {
-  border-collapse: collapse;
-  font-family: var(--mono);
-  font-size: 12px;
-}
-.grid thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+.grid-head {
+  display: flex;
   background: var(--panel2);
   border-bottom: 1px solid var(--line);
-  padding: 5px 9px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+.grid-head .th {
+  background: none;
+  border: 0;
   text-align: left;
-  white-space: nowrap;
   cursor: pointer;
   font-weight: 600;
 }
-.grid thead th:hover {
+.grid-head .th:hover {
   color: var(--accent);
 }
 .sort {
@@ -261,32 +255,46 @@ main {
   margin-left: 4px;
   font-size: 9px;
 }
-.grid tbody tr {
-  display: flex;
-  cursor: default;
+.grid-scroll {
+  flex: 1;
+  overflow: auto;
 }
-.grid tbody tr:hover {
+.grid-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  display: flex;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.grid-row:hover {
   background: var(--panel);
 }
-.grid tbody tr.on {
+.grid-row.on {
   background: var(--panel2);
 }
-.grid tbody td {
+.cell {
   flex: 1;
   min-width: 0;
   padding: 4px 9px;
-  border-bottom: 1px solid #1b2026;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  border-bottom: 1px solid #1b2026;
 }
-.grid td.num {
+.grid-head .cell {
+  border-bottom: 0;
+  padding: 5px 9px;
+}
+.cell.num {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.grid td.idx {
+.cell.idx {
   flex: none;
   width: 64px;
+  text-align: right;
   color: var(--dim);
 }
 .grid-foot {

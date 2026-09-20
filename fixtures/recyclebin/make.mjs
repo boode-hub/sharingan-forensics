@@ -45,6 +45,15 @@ function info2(records) {
   return Buffer.concat([head, ...recs]);
 }
 
+// Same bytes as v2.$I, under a name an analyst might give it on export.
+// Detection has to come from the content, not from a "$I" filename prefix.
+const v2 = dollarI({
+  version: 2,
+  size: 4294967296, // >4GB, proves the 64-bit size field is read as such
+  deleted: '2021-11-15T23:59:59Z',
+  path: 'D:\\Evidence\\big file with spaces.vhdx',
+});
+
 const cases = {
   'v1.$I': dollarI({
     version: 1,
@@ -52,12 +61,8 @@ const cases = {
     deleted: '2019-06-01T10:30:00Z',
     path: 'C:\\Users\\suspect\\Documents\\notes.txt',
   }),
-  'v2.$I': dollarI({
-    version: 2,
-    size: 4294967296, // >4GB, proves the 64-bit size field is read as such
-    deleted: '2021-11-15T23:59:59Z',
-    path: 'D:\\Evidence\\big file with spaces.vhdx',
-  }),
+  'v2.$I': v2,
+  'renamed-v2.bin': v2,
   // Non-ASCII path: catches a parser that decodes UTF-16 one byte at a time.
   'v2-unicode.$I': dollarI({
     version: 2,

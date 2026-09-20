@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # Fixtures are generated, never committed as opaque blobs a reviewer
+      # cannot audit. Regenerating them here proves the committed samples still
+      # match the documented layout in make.mjs.
+      - name: Rebuild fixtures
+        run: for f in fixtures/*/make.mjs; do node "$f"; done
+
+      - name: Fixtures are reproducible
+        run: git diff --exit-code -- fixtures/
+
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      # Forensic software with a network call is not forensic software.
+      - name: No network calls in shipped code
+        run: |
+          if grep -rnE '\b(fetch|XMLHttpRequest|WebSocket|sendBeacon|importScripts)\s*\(' src/ \
+             --include='*.ts' --include='*.tsx' | grep -v '\.test\.'; then
+            echo "::error::shipped code must not make network calls"
+            exit 1
+          fi

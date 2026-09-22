@@ -58,7 +58,11 @@ function prefetch({ version, exe, runTimes, runCount, files, volume }) {
   info.writeUInt32LE(volBlock.length, 116 - HEADER);
   // Eight last-run slots at offset 128; unused slots stay zero (= never run).
   runTimes.forEach((t, i) => info.writeBigUInt64LE(ft(t), 128 - HEADER + i * 8));
-  info.writeUInt32LE(runCount, 200 - HEADER);
+  // Run count sits at 208 in version 30/31 and at 200 before that. Windows 10
+  // builds that still used 200 leave the slot at 204 populated, which is how
+  // PECmd tells the two apart, so a v30/v31 fixture has to use 208 or it is
+  // not modelling a real file.
+  info.writeUInt32LE(runCount, (version >= 30 ? 208 : 200) - HEADER);
 
   const buf = Buffer.concat([head, info, strings, volBlock]);
   buf.writeUInt32LE(buf.length, 12);

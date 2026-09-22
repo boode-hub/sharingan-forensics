@@ -18,17 +18,13 @@ function loadExpected(): Record<string, unknown[]> {
   return JSON.parse(raw);
 }
 
+/** Every Date becomes an ISO string, so expected.json can stay plain JSON. */
 function normalizeRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
-  return rows.map((r) => {
-    const out: Record<string, unknown> = { ...r };
-    if (out.runTime instanceof Date) {
-      out.runTime = out.runTime.toISOString();
-    }
-    if (out.volumeCreated instanceof Date) {
-      out.volumeCreated = out.volumeCreated.toISOString();
-    }
-    return out;
-  });
+  return rows.map((r) =>
+    Object.fromEntries(
+      Object.entries(r).map(([k, v]) => [k, v instanceof Date ? v.toISOString() : v]),
+    ),
+  );
 }
 
 describe('prefetch parser', () => {

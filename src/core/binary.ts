@@ -51,6 +51,17 @@ export function utf16(b: Uint8Array): string {
   return nul === -1 ? s : s.slice(0, nul);
 }
 
+/**
+ * Decodes UTF-16LE keeping every character, NULs included.
+ *
+ * Needed wherever a block holds several NUL-separated strings rather than one
+ * NUL-padded field: truncating at the first NUL there would silently discard
+ * everything after the first entry.
+ */
+export function utf16Raw(b: Uint8Array): string {
+  return UTF16.decode(b);
+}
+
 /** Decodes single-byte (cp1252) and drops everything from the first NUL onward. */
 export function ascii(b: Uint8Array): string {
   const s = ASCII.decode(b);

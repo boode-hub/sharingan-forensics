@@ -22,6 +22,7 @@ produce them.
 
 | Directory | Origin | Format reference |
 |---|---|---|
+| `recyclebin/INFO2-winxp`, `Win10-$IFATB0K`, `Win7-$I6SODDB`, `Win81-$I3VPA17` | Real samples from the MIT-licensed [EricZimmerman/RBCmd](https://github.com/EricZimmerman/RBCmd) test corpus. The INFO2 is the one that matters: a synthetic file written from a wrong reading of the header agrees with a parser that shares the same wrong reading, and only a real file settles it. | [libyal dtformats — Windows Recycler](https://github.com/libyal/dtformats/blob/main/documentation/Windows%20Recycler%20file%20formats.asciidoc) |
 | `recyclebin/` | `make.mjs` | [libyal dtformats — Windows Recycle Bin](https://github.com/libyal/dtformats/blob/main/documentation/Windows%20Recycle%20Bin.asciidoc) |
 | `prefetch/` | `make.mjs`, including a MAM/Xpress-Huffman copy of the same body | [libscca — Prefetch File format](https://github.com/libyal/libscca/blob/main/documentation/Windows%20Prefetch%20File%20(PF)%20format.asciidoc) |
 | `prefetch/DEVENV.EXE-854D7862.pf` | Real Windows 10 Prefetch from [EricZimmerman/Prefetch](https://github.com/EricZimmerman/Prefetch) test corpus, MIT licensed | as above |

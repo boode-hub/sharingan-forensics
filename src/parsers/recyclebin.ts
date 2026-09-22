@@ -8,6 +8,7 @@ import type { Column, Parser, Reader, Ctx, Row } from '../core/types';
 import { Cursor, utf16 } from '../core/binary';
 
 const columns: Column[] = [
+  { key: 'fileType', label: 'File Type', type: 'str' },
   { key: 'version', label: 'Version', type: 'num' },
   { key: 'originalPath', label: 'Original Path', type: 'str' },
   { key: 'fileName', label: 'File Name', type: 'str' },
@@ -15,8 +16,19 @@ const columns: Column[] = [
   { key: 'deletedOn', label: 'Deleted On', type: 'date' },
   { key: 'recordIndex', label: 'Record Index', type: 'num', secondary: true },
   { key: 'driveLetter', label: 'Drive Letter', type: 'str', secondary: true },
+  { key: 'sourceFile', label: 'Source File', type: 'str' },
   { key: 'offset', label: 'Offset', type: 'num', secondary: true },
 ];
+
+// The INFO2 header is five 32-bit fields. Reading it as four shifts every
+// record four bytes and corrupts all of them, which is the kind of failure
+// that produces confident, wrong output rather than an error.
+const INFO2_HEADER_SIZE = 20;
+
+// Every INFO2 in the wild uses 800-byte records, and RBCmd reads that size
+// unconditionally. The header's own field is checked against it rather than
+// trusted, since a wrong value there would desynchronise the whole file.
+const INFO2_RECORD_SIZE = 800;
 
 function basename(path: string): string {
   const idx = path.lastIndexOf('\\');
@@ -78,6 +90,7 @@ async function* parseDollarI(reader: Reader, ctx: Ctx): AsyncGenerator<Row> {
   }
 
   yield {
+    fileType: '$I',
     version,
     originalPath,
     fileName: basename(originalPath),
@@ -85,28 +98,33 @@ async function* parseDollarI(reader: Reader, ctx: Ctx): AsyncGenerator<Row> {
     deletedOn,
     recordIndex: null,
     driveLetter: null,
+    sourceFile: reader.name,
     offset: 0,
   };
 }
 
 async function* parseInfo2(reader: Reader, ctx: Ctx): AsyncGenerator<Row> {
-  const header = await reader.bytes(0, 16);
-  if (header.length < 16) {
+  const header = await reader.bytes(0, INFO2_HEADER_SIZE);
+  if (header.length < INFO2_HEADER_SIZE) {
     ctx.warn(0, 'truncated INFO2 header');
     return;
   }
 
   const h = new Cursor(header);
   const version = h.u32();
-  h.u32(); // record count (unreliable)
-  let recordSize = h.u32();
+  h.u32(); // record count, unreliable
+  h.u32(); // unknown
+  const declaredSize = h.u32();
 
-  if (recordSize === 0 || recordSize < 280 || recordSize > 4096) {
-    ctx.warn(12, `implausible INFO2 record size ${recordSize}, falling back to 800`);
-    recordSize = 800;
+  if (declaredSize !== INFO2_RECORD_SIZE) {
+    ctx.warn(
+      12,
+      `header declares ${declaredSize}-byte records; reading ${INFO2_RECORD_SIZE}-byte records, which is what Windows writes`,
+    );
   }
 
-  let offset = 16;
+  const recordSize = INFO2_RECORD_SIZE;
+  let offset = INFO2_HEADER_SIZE;
 
   while (true) {
     if (ctx.signal?.aborted) break;
@@ -140,6 +158,7 @@ async function* parseInfo2(reader: Reader, ctx: Ctx): AsyncGenerator<Row> {
     }
 
     yield {
+      fileType: 'INFO2',
       version,
       originalPath,
       fileName: basename(originalPath),
@@ -147,7 +166,8 @@ async function* parseInfo2(reader: Reader, ctx: Ctx): AsyncGenerator<Row> {
       deletedOn,
       recordIndex: idx,
       driveLetter: driveLetterFromNumber(driveNum),
-      offset
+      sourceFile: reader.name,
+      offset,
     };
 
     offset += recordSize;
@@ -174,10 +194,22 @@ function sniffDollarI(head: Uint8Array, filename: string): boolean {
   return true;
 }
 
-function sniffInfo2(_head: Uint8Array, filename: string): boolean {
-  const name = filename.toLowerCase();
-  if (name === 'info2') return true;
-  return false;
+/**
+ * INFO2 has no magic, so it is recognised by shape: a plausible version, the
+ * 800-byte record size every Windows wrote, and a header that is followed by
+ * whole records. Matching on the name alone would miss a carved or exported
+ * copy, which is how these usually arrive.
+ */
+function sniffInfo2(head: Uint8Array, filename: string, size?: number): boolean {
+  if (filename.toLowerCase() === 'info2') return true;
+  if (head.length < INFO2_HEADER_SIZE) return false;
+
+  const dv = new DataView(head.buffer, head.byteOffset, head.byteLength);
+  const version = dv.getUint32(0, true);
+  if (version > 5) return false;
+  if (dv.getUint32(12, true) !== INFO2_RECORD_SIZE) return false;
+  if (size !== undefined && (size - INFO2_HEADER_SIZE) % INFO2_RECORD_SIZE !== 0) return false;
+  return true;
 }
 
 export const recycleBin: Parser = {
@@ -191,11 +223,14 @@ export const recycleBin: Parser = {
   },
   async *parse(reader: Reader, ctx: Ctx): AsyncGenerator<Row> {
     const name = reader.name.toLowerCase();
-    const head = await reader.bytes(0, 28);
-    if (sniffDollarI(head, name)) {
-      yield* parseDollarI(reader, ctx);
-    } else {
+    const head = await reader.bytes(0, INFO2_HEADER_SIZE + 8);
+    // INFO2 is checked first: its shape test is the stricter of the two, and a
+    // $I test that leans on the file name would otherwise claim an INFO2
+    // exported under a name beginning with "$i".
+    if (sniffInfo2(head, name, reader.size)) {
       yield* parseInfo2(reader, ctx);
+    } else {
+      yield* parseDollarI(reader, ctx);
     }
   },
 };

@@ -1,6 +1,8 @@
 {
+  "_comment": "Written from what make.mjs lays down, not from parser output. The INFO2 header is five 32-bit fields, so the first record starts at 20 and the second at 820.",
   "v1.$I": [
     {
+      "fileType": "$I",
       "version": 1,
       "originalPath": "C:\\Users\\suspect\\Documents\\notes.txt",
       "fileName": "notes.txt",
@@ -8,11 +10,13 @@
       "deletedOn": "2019-06-01T10:30:00.000Z",
       "recordIndex": null,
       "driveLetter": null,
+      "sourceFile": "v1.$I",
       "offset": 0
     }
   ],
   "v2.$I": [
     {
+      "fileType": "$I",
       "version": 2,
       "originalPath": "D:\\Evidence\\big file with spaces.vhdx",
       "fileName": "big file with spaces.vhdx",
@@ -20,11 +24,13 @@
       "deletedOn": "2021-11-15T23:59:59.000Z",
       "recordIndex": null,
       "driveLetter": null,
+      "sourceFile": "v2.$I",
       "offset": 0
     }
   ],
   "v2-unicode.$I": [
     {
+      "fileType": "$I",
       "version": 2,
       "originalPath": "C:\\Users\\مستخدم\\文件.docx",
       "fileName": "文件.docx",
@@ -32,11 +38,13 @@
       "deletedOn": "2024-02-29T12:00:00.000Z",
       "recordIndex": null,
       "driveLetter": null,
+      "sourceFile": "v2-unicode.$I",
       "offset": 0
     }
   ],
   "INFO2": [
     {
+      "fileType": "INFO2",
       "version": 5,
       "originalPath": "C:\\WINDOWS\\Temp\\old.log",
       "fileName": "old.log",
@@ -44,9 +52,11 @@
       "deletedOn": "2003-04-05T06:07:08.000Z",
       "recordIndex": 0,
       "driveLetter": "C:",
-      "offset": 16
+      "sourceFile": "INFO2",
+      "offset": 20
     },
     {
+      "fileType": "INFO2",
       "version": 5,
       "originalPath": "C:\\Docs\\report.doc",
       "fileName": "report.doc",
@@ -54,11 +64,13 @@
       "deletedOn": "2004-12-25T00:00:01.000Z",
       "recordIndex": 1,
       "driveLetter": "C:",
-      "offset": 816
+      "sourceFile": "INFO2",
+      "offset": 820
     }
   ],
   "renamed-v2.bin": [
     {
+      "fileType": "$I",
       "version": 2,
       "originalPath": "D:\\Evidence\\big file with spaces.vhdx",
       "fileName": "big file with spaces.vhdx",
@@ -66,6 +78,7 @@
       "deletedOn": "2021-11-15T23:59:59.000Z",
       "recordIndex": null,
       "driveLetter": null,
+      "sourceFile": "renamed-v2.bin",
       "offset": 0
     }
   ]

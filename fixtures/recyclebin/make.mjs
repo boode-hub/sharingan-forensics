@@ -28,10 +28,13 @@ function dollarI({ version, size, deleted, path }) {
 }
 
 function info2(records) {
-  const head = Buffer.alloc(16);
+  // The INFO2 header is five 32-bit fields, so 20 bytes, not 16. Getting this
+  // wrong shifts every record by four bytes and quietly corrupts all of them.
+  const head = Buffer.alloc(20);
   head.writeUInt32LE(5, 0); // version (Win2000/XP)
   head.writeUInt32LE(records.length, 8);
   head.writeUInt32LE(800, 12); // record size
+  head.writeUInt32LE(0, 16); // unknown, zero on every sample
   const recs = records.map((r, i) => {
     const b = Buffer.alloc(800);
     b.write(r.ansiPath + '\0', 0, 'latin1'); // 260-byte ANSI path

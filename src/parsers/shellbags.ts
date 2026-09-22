@@ -19,14 +19,7 @@
  *                 Software\\Microsoft\\Windows\\ShellNoRoam\\BagMRU
  */
 import type { Column, Ctx, Parser, Reader, Row } from '../core/types';
-import { magic } from '../core/binary';
-import {
-  collectCells,
-  parseKey,
-  readDataCell,
-  readRawValue,
-  type CellRec,
-} from './registry';
+import { openHive, type HiveKey } from './registry/hive';
 import { parseShellItem, type ShellItem } from '../core/shellitem';
 
 const columns: Column[] = [
@@ -64,97 +57,22 @@ export const shellbags: Parser = {
     return false;
   },
   async *parse(reader: Reader, ctx: Ctx): AsyncGenerator<Row> {
-    const head = await reader.bytes(0, 4096);
-    if (!magic(head, 'regf', 0)) {
-      ctx.warn(0, 'not a registry hive, so it cannot hold shell bags');
-      return;
-    }
+    const hive = await openHive(reader, ctx);
+    if (!hive) return;
 
-    const dv = new DataView(head.buffer, head.byteOffset, head.byteLength);
-    const minor = dv.getUint32(24, true);
-    const rootRel = dv.getUint32(36, true);
-    const hbinLength = dv.getUint32(40, true);
+    // Live keys only: recovering deleted bags is a separate question from
+    // reading the ones Explorer still keeps.
+    const subkeys = (key: HiveKey) => hive.subkeys(key).filter((k) => !k.deleted);
+    const values = async (key: HiveKey) => new Map((await hive.values(key)).map((v) => [v.name, v]));
 
-    const { cells, lists, rootOffsets } = await collectCells(reader, ctx, hbinLength);
-    const root = cells.get(rootOffsets[0] ?? rootRel);
-    if (!root || root.sig !== 'nk') {
-      ctx.warn(0, 'root key not found');
-      return;
-    }
-
-    /** Subkeys of a key, by name, following the stable subkey lists. */
-    function subkeys(cell: CellRec, depth = 0): Map<string, CellRec> {
-      const out = new Map<string, CellRec>();
-      const key = parseKey(cell.buf);
-      if (!key || key.subkeyListRel === 0 || key.subkeyListRel === 0xffffffff) return out;
-
-      const visit = (listRel: number, d: number) => {
-        if (d > MAX_DEPTH) return;
-        const list = lists.get(listRel);
-        if (!list) return;
-        const lv = new DataView(list.buf.buffer, list.buf.byteOffset, list.buf.byteLength);
-        const sig = list.buf[4] | (list.buf[5] << 8);
-        const n = lv.getUint16(6, true);
-        const stride = sig === 0x666c || sig === 0x686c ? 8 : 4; // lf/lh carry a hash
-        for (let i = 0; i < n; i++) {
-          const at = 8 + i * stride;
-          if (at + 4 > list.buf.length) break;
-          const rel = lv.getUint32(at, true);
-          if (sig === 0x6972) {
-            visit(rel, d + 1); // ri points at more lists
-            continue;
-          }
-          const nk = cells.get(rel);
-          if (!nk || nk.sig !== 'nk') continue;
-          const k = parseKey(nk.buf);
-          if (k) out.set(k.name, nk);
-        }
-      };
-
-      visit(key.subkeyListRel, depth);
-      return out;
-    }
-
-    /** Every value of a key, by name. */
-    async function values(cell: CellRec): Promise<Map<string, { type: number; bytes: Uint8Array; rel: number }>> {
-      const out = new Map<string, { type: number; bytes: Uint8Array; rel: number }>();
-      const key = parseKey(cell.buf);
-      if (!key || key.valueListRel === 0 || key.valueListRel === 0xffffffff) return out;
-      const list = await readDataCell(reader, key.valueListRel);
-      if (!list) return out;
-      const n = Math.min(key.valueCount, Math.floor(list.length / 4));
-      for (let i = 0; i < n; i++) {
-        const rel = new DataView(list.buffer, list.byteOffset + i * 4, 4).getUint32(0, true);
-        const vk = cells.get(rel);
-        if (!vk || vk.sig !== 'vk') continue;
-        const v = await readRawValue(reader, vk, minor);
-        if (v) out.set(v.name, { type: v.type, bytes: v.bytes, rel });
-      }
-      return out;
-    }
-
-    /** Walks down to a key by path, returning null if any step is missing. */
-    function descend(from: CellRec, path: string[]): CellRec | null {
-      let current: CellRec | null = from;
-      for (const part of path) {
-        if (!current) return null;
-        const children = subkeys(current);
-        current =
-          children.get(part) ??
-          [...children.entries()].find(([n]) => n.toLowerCase() === part.toLowerCase())?.[1] ??
-          null;
-      }
-      return current;
-    }
-
-    const roots: Array<{ label: string; cell: CellRec }> = [];
+    const roots: Array<{ label: string; key: HiveKey }> = [];
     for (const path of [
-      ['Local Settings', 'Software', 'Microsoft', 'Windows', 'Shell', 'BagMRU'],
-      ['Software', 'Microsoft', 'Windows', 'Shell', 'BagMRU'],
-      ['Software', 'Microsoft', 'Windows', 'ShellNoRoam', 'BagMRU'],
+      'Local Settings\\Software\\Microsoft\\Windows\\Shell\\BagMRU',
+      'Software\\Microsoft\\Windows\\Shell\\BagMRU',
+      'Software\\Microsoft\\Windows\\ShellNoRoam\\BagMRU',
     ]) {
-      const cell = descend(root, path);
-      if (cell) roots.push({ label: path.join('\\'), cell });
+      const key = hive.key(hive.root, path);
+      if (key && !key.deleted) roots.push({ label: path, key });
     }
 
     if (roots.length === 0) {
@@ -174,7 +92,7 @@ export const shellbags: Parser = {
      * the name and timestamps, the subkey gives the children.
      */
     async function* walk(
-      node: CellRec,
+      node: HiveKey,
       parentPath: string,
       bagPath: string,
       depth: number,
@@ -182,8 +100,7 @@ export const shellbags: Parser = {
       if (depth > MAX_DEPTH || ctx.signal?.aborted) return;
 
       const vals = await values(node);
-      const kids = subkeys(node);
-      const key = parseKey(node.buf);
+      const kids = new Map(subkeys(node).map((k) => [k.name, k]));
 
       const nodeSlotRaw = vals.get('NodeSlot');
       const nodeSlot =
@@ -240,7 +157,7 @@ export const shellbags: Parser = {
           fileSystemHint: item.fileSystemHint,
           nodeSlot,
           mruPosition: order.has(Number(name)) ? order.get(Number(name)) : null,
-          lastWrite: key?.lastWrite ?? null,
+          lastWrite: node.lastWrite,
           bagPath: childBag,
           sourceFile: reader.name,
           offset: val.rel + 4096,
@@ -251,8 +168,8 @@ export const shellbags: Parser = {
       }
     }
 
-    for (const { label, cell } of roots) {
-      yield* walk(cell, '', label, 0);
+    for (const { label, key } of roots) {
+      yield* walk(key, '', label, 0);
     }
 
     if (emitted === 0) {

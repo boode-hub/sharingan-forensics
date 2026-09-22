@@ -18,14 +18,8 @@
  *   ControlSet00N\\Control\\Session Manager\\AppCompatibility\\AppCompatCache  (XP)
  */
 import type { Column, Ctx, Parser, Reader, Row } from '../core/types';
-import { filetime, magic } from '../core/binary';
-import {
-  collectCells,
-  parseKey,
-  readDataCell,
-  readRawValue,
-  type CellRec,
-} from './registry';
+import { filetime } from '../core/binary';
+import { openHive } from './registry/hive';
 
 const columns: Column[] = [
   { key: 'position', label: 'Cache Entry Position', type: 'num' },
@@ -38,6 +32,9 @@ const columns: Column[] = [
   { key: 'sourceFile', label: 'Source File', type: 'str' },
   { key: 'offset', label: 'Offset', type: 'num', secondary: true },
 ];
+
+/** Below a control set; XP keeps the value under AppCompatibility instead. */
+const SESSION_MANAGER = 'Control\\Session Manager\\';
 
 /** His InsertFlag.Executed. The other bits are unknown and stay unread. */
 const INSERT_EXECUTED = 0x00000002;
@@ -260,67 +257,16 @@ export const appCompatCache: Parser = {
     return false;
   },
   async *parse(reader: Reader, ctx: Ctx): AsyncGenerator<Row> {
-    const head = await reader.bytes(0, 4096);
-    if (!magic(head, 'regf', 0)) {
-      ctx.warn(0, 'not a registry hive; shimcache lives in the SYSTEM hive');
+    const hive = await openHive(reader, ctx);
+    if (!hive) {
+      ctx.warn(0, 'shimcache lives in the SYSTEM hive');
       return;
     }
 
-    const hv = new DataView(head.buffer, head.byteOffset, head.byteLength);
-    const minor = hv.getUint32(24, true);
-    const rootRel = hv.getUint32(36, true);
-    const hbinLength = hv.getUint32(40, true);
-
-    const { cells, lists, rootOffsets } = await collectCells(reader, ctx, hbinLength);
-    const root = cells.get(rootOffsets[0] ?? rootRel);
-    if (!root || root.sig !== 'nk') {
-      ctx.warn(0, 'root key not found');
-      return;
-    }
-
-    function subkeys(cell: CellRec): Map<string, CellRec> {
-      const out = new Map<string, CellRec>();
-      const key = parseKey(cell.buf);
-      if (!key || key.subkeyListRel === 0 || key.subkeyListRel === 0xffffffff) return out;
-
-      const visit = (listRel: number, depth: number) => {
-        if (depth > 32) return;
-        const list = lists.get(listRel);
-        if (!list) return;
-        const lv = new DataView(list.buf.buffer, list.buf.byteOffset, list.buf.byteLength);
-        const sig = list.buf[4] | (list.buf[5] << 8);
-        const n = lv.getUint16(6, true);
-        const stride = sig === 0x666c || sig === 0x686c ? 8 : 4;
-        for (let i = 0; i < n; i++) {
-          const at = 8 + i * stride;
-          if (at + 4 > list.buf.length) break;
-          const rel = lv.getUint32(at, true);
-          if (sig === 0x6972) {
-            visit(rel, depth + 1);
-            continue;
-          }
-          const nk = cells.get(rel);
-          if (!nk || nk.sig !== 'nk') continue;
-          const k = parseKey(nk.buf);
-          if (k) out.set(k.name.toLowerCase(), nk);
-        }
-      };
-      visit(key.subkeyListRel, 0);
-      return out;
-    }
-
-    function descend(from: CellRec, path: string[]): CellRec | null {
-      let current: CellRec | null = from;
-      for (const part of path) {
-        if (!current) return null;
-        current = subkeys(current).get(part.toLowerCase()) ?? null;
-      }
-      return current;
-    }
-
-    const controlSets = [...subkeys(root).entries()].filter(([name]) =>
-      /^controlset\d+$/.test(name),
-    );
+    // Live keys only, as he reads them.
+    const controlSets = hive
+      .subkeys(hive.root)
+      .filter((k) => !k.deleted && /^controlset\d+$/i.test(k.name));
     if (controlSets.length === 0) {
       ctx.warn(0, 'no ControlSet keys in this hive; shimcache lives in the SYSTEM hive');
       return;
@@ -328,28 +274,18 @@ export const appCompatCache: Parser = {
 
     let found = 0;
 
-    for (const [setName, setCell] of controlSets) {
+    for (const set of controlSets) {
       if (ctx.signal?.aborted) return;
+      const setName = set.name;
       const controlSet = Number(setName.replace(/\D/g, ''));
 
-      for (const path of [
-        ['Control', 'Session Manager', 'AppCompatCache'],
-        ['Control', 'Session Manager', 'AppCompatibility'],
-      ]) {
-        const keyCell = descend(setCell, path);
-        if (!keyCell) continue;
+      for (const path of [SESSION_MANAGER + 'AppCompatCache', SESSION_MANAGER + 'AppCompatibility']) {
+        const key = hive.key(set, path);
+        if (!key || key.deleted) continue;
 
-        const key = parseKey(keyCell.buf);
-        if (!key || key.valueListRel === 0 || key.valueListRel === 0xffffffff) continue;
-        const list = await readDataCell(reader, key.valueListRel);
-        if (!list) continue;
-
-        for (let i = 0; i < Math.min(key.valueCount, Math.floor(list.length / 4)); i++) {
-          const rel = new DataView(list.buffer, list.byteOffset + i * 4, 4).getUint32(0, true);
-          const vk = cells.get(rel);
-          if (!vk || vk.sig !== 'vk') continue;
-          const value = await readRawValue(reader, vk, minor);
-          if (!value || value.name.toLowerCase() !== 'appcompatcache') continue;
+        for (const value of await hive.values(key)) {
+          if (value.name.toLowerCase() !== 'appcompatcache') continue;
+          const rel = value.rel;
 
           const b = value.bytes;
           if (b.length < 136) {

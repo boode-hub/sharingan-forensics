@@ -13,6 +13,9 @@
  * the logs show as changed still has its old data. Every large hive in a live
  * collection is in this state.
  */
+import type { Ctx, Reader } from '../../core/types';
+import { magic } from '../../core/binary';
+import { bufReader } from '../../core/reader';
 
 /** A page of hive bytes that a log entry supersedes. */
 interface DirtyPage {
@@ -251,4 +254,62 @@ export function replay(
     newSequenceNumber,
     logsUsed,
   };
+}
+
+/**
+ * The hive brought up to date from the logs opened with it, or the hive as it
+ * is when it is clean or no logs came with it. Every reader of a hive goes
+ * through this, so an artifact read out of a hive is as current as the hive
+ * view of the same file.
+ */
+export async function replayIfDirty(source: Reader, ctx: Ctx): Promise<Reader> {
+  let reader = source;
+
+  // A hive whose two sequence numbers disagree has changes sitting in its
+  // transaction logs. If the logs were opened with it, replay them first, so
+  // what follows is the hive as the machine would have seen it rather than
+  // as it was last flushed.
+  if (ctx.siblings && ctx.siblings.length > 0 && reader.size >= 4096) {
+    const head = await reader.bytes(0, 12);
+    if (head.length >= 12 && magic(head, 'regf', 0)) {
+      const hv = new DataView(head.buffer, head.byteOffset, head.byteLength);
+      const primary = hv.getUint32(4, true);
+      const secondary = hv.getUint32(8, true);
+      if (primary !== secondary) {
+        const logs: Array<{ name: string; bytes: Uint8Array }> = [];
+        for (const sib of ctx.siblings) {
+          const bytes = await sib.bytes(0, sib.size);
+          if (bytes.length > 0x200 && magic(bytes, 'regf', 0)) {
+            logs.push({ name: sib.name, bytes });
+          } else {
+            ctx.warn(0, `${sib.name} is not a registry transaction log; ignoring it`);
+          }
+        }
+
+        if (logs.length > 0) {
+          const hive = await reader.bytes(0, reader.size);
+          const result = replay(hive, logs, secondary);
+          if (result.entriesApplied > 0) {
+            reader = bufReader(result.bytes, reader.name);
+            ctx.warn(
+              0,
+              `replayed ${result.entriesApplied} log entr${result.entriesApplied === 1 ? 'y' : 'ies'} (${result.pagesApplied} pages) from ${result.logsUsed.join(', ')}; the rows below are the hive brought up to date, not as it was captured`,
+            );
+          } else {
+            ctx.warn(
+              0,
+              `the logs held nothing newer than the hive itself, so nothing was replayed${result.entriesRejected > 0 ? `; ${result.entriesRejected} entr${result.entriesRejected === 1 ? 'y' : 'ies'} failed hash verification and were skipped` : ''}`,
+            );
+          }
+          if (result.entriesRejected > 0 && result.entriesApplied > 0) {
+            ctx.warn(
+              0,
+              `${result.entriesRejected} log entr${result.entriesRejected === 1 ? 'y was' : 'ies were'} incomplete and skipped rather than applied`,
+            );
+          }
+        }
+      }
+    }
+  }
+  return reader;
 }

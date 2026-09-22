@@ -138,7 +138,7 @@ function regTypeName(raw: number): string {
   return REG_TYPE_NAMES[raw] ?? 'REG_UNKNOWN';
 }
 
-interface CellRec {
+export interface CellRec {
   sig: string;
   rel: number;
   buf: Uint8Array;
@@ -149,7 +149,7 @@ function cellSig(buf: Uint8Array): number {
   return buf[4] | (buf[5] << 8);
 }
 
-function isFree(buf: Uint8Array): boolean {
+export function isFree(buf: Uint8Array): boolean {
   if (buf.length < 4) return true;
   return new DataView(buf.buffer, buf.byteOffset, 4).getInt32(0, true) > 0;
 }
@@ -160,7 +160,7 @@ function isFree(buf: Uint8Array): boolean {
  * CellRecords / ListRecords dictionaries. Free cells are kept too: a cell the
  * live tree never reaches is what deleted-key recovery works from.
  */
-async function collectCells(
+export async function collectCells(
   reader: Reader,
   ctx: Ctx,
   hbinLength: number,
@@ -222,7 +222,7 @@ async function collectCells(
 }
 
 /** Read a size-prefixed data cell (value list, big-data, class) at relative offset. Returns bytes after the size header. */
-async function readDataCell(reader: Reader, rel: number): Promise<Uint8Array | null> {
+export async function readDataCell(reader: Reader, rel: number): Promise<Uint8Array | null> {
   const abs = rel + 4096;
   if (abs < 0 || abs + 4 > reader.size) return null;
   const sizeBuf = await reader.bytes(abs, 4);
@@ -234,7 +234,7 @@ async function readDataCell(reader: Reader, rel: number): Promise<Uint8Array | n
 }
 
 /** Raw bytes of the whole data cell (including its 4-byte size header) at a relative offset. */
-async function readCellRaw(reader: Reader, rel: number): Promise<Uint8Array | null> {
+export async function readCellRaw(reader: Reader, rel: number): Promise<Uint8Array | null> {
   const abs = rel + 4096;
   if (abs < 0 || abs + 4 > reader.size) return null;
   const sizeBuf = await reader.bytes(abs, 4);
@@ -244,7 +244,7 @@ async function readCellRaw(reader: Reader, rel: number): Promise<Uint8Array | nu
   return reader.bytes(abs, size);
 }
 
-function utf16Text(buf: Uint8Array): string {
+export function utf16Text(buf: Uint8Array): string {
   let s = '';
   for (let i = 0; i + 1 < buf.length; i += 2) {
     const c = buf[i] | (buf[i + 1] << 8);
@@ -354,6 +354,125 @@ function guidHex(buf: Uint8Array, start: number): string {
     `${h(3)}${h(2)}${h(1)}${h(0)}-${h(5)}${h(4)}-${h(7)}${h(6)}-` +
     `${h(8)}${h(9)}-${h(10)}${h(11)}${h(12)}${h(13)}${h(14)}${h(15)}`
   );
+}
+
+/** The fields of an nk cell, read once so every caller agrees on the layout. */
+export interface KeyRecord {
+  flags: number;
+  lastWrite: Date | null;
+  parentRel: number;
+  subkeyCount: number;
+  subkeyListRel: number;
+  valueCount: number;
+  valueListRel: number;
+  name: string;
+}
+
+export function parseKey(buf: Uint8Array): KeyRecord | null {
+  if (buf.length < 0x50) return null;
+  const c = new Cursor(buf, 6);
+  const flags = c.u16();
+  const lastWrite = c.filetime();
+  c.skip(4); // access
+  const parentRel = c.u32();
+  const subkeyCount = c.u32();
+  c.u32(); // volatile subkey count
+  const subkeyListRel = c.u32();
+  c.u32(); // volatile subkey list
+  const valueCount = c.u32();
+  const valueListRel = c.u32();
+  c.skip(4 + 4 + 4 + 4 + 8 + 4); // security, class, maxima, workvar
+  const nameLen = c.u16();
+  if (buf.length < 0x50 + nameLen) return null;
+  const name =
+    (flags & NK_FLAG_COMPRESSED_NAME) !== 0
+      ? asciiBytes(buf.subarray(0x50, 0x50 + nameLen))
+      : utf16Text(buf.subarray(0x50, 0x50 + nameLen * 2));
+  return {
+    flags,
+    lastWrite,
+    parentRel,
+    subkeyCount,
+    subkeyListRel,
+    valueCount,
+    valueListRel,
+    name,
+  };
+}
+
+/**
+ * A value's name, type and raw bytes.
+ *
+ * Artifacts stored inside the registry keep their own binary structures in
+ * value data, so they need the bytes rather than the rendered string a grid
+ * would show.
+ */
+export interface RawValue {
+  name: string;
+  type: number;
+  bytes: Uint8Array;
+}
+
+export async function readRawValue(
+  reader: Reader,
+  vk: CellRec,
+  minor: number,
+): Promise<RawValue | null> {
+  const buf = vk.buf;
+  if (buf.length < 0x18) return null;
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  const nameLen = dv.getUint16(6, true);
+  const dataLenRaw = dv.getUint32(8, true);
+  const offsetToData = dv.getUint32(0x0c, true);
+  const type = dv.getUint32(0x10, true) & 0x00000fff;
+  const namePresent = dv.getUint16(0x14, true);
+
+  let name = '(default)';
+  if (nameLen > 0) {
+    name =
+      namePresent > 0
+        ? asciiBytes(buf.subarray(0x18, 0x18 + nameLen))
+        : utf16Text(buf.subarray(0x18, 0x18 + nameLen * 2));
+  }
+
+  const resident = (dataLenRaw & 0x80000000) !== 0;
+  const dataLen = resident ? dataLenRaw & 0x7fffffff : dataLenRaw;
+
+  if (resident) {
+    return { name, type, bytes: buf.subarray(0x0c, Math.min(0x0c + dataLen, buf.length)) };
+  }
+
+  const cell = await readCellRaw(reader, offsetToData);
+  if (!cell) return null;
+
+  if (dataLen > 16344 && minor > 3) {
+    // Big data: the cell is a list of fragments, each holding up to 16344 bytes.
+    if (cell.length < 0x0c) return null;
+    const cv = new DataView(cell.buffer, cell.byteOffset, cell.byteLength);
+    const count = cv.getUint16(6, true);
+    const listCell = await readCellRaw(reader, cv.getUint32(8, true));
+    if (!listCell) return null;
+    const parts: Uint8Array[] = [];
+    let total = 0;
+    for (let i = 1; i <= count; i++) {
+      if (i * 4 + 4 > listCell.length) break;
+      const segRel = new DataView(listCell.buffer, listCell.byteOffset + i * 4, 4).getUint32(0, true);
+      const seg = await readCellRaw(reader, segRel);
+      if (!seg || seg.length <= 4) continue;
+      const part = seg.subarray(4, 4 + Math.min(seg.length - 4, 16344));
+      parts.push(part);
+      total += part.length;
+    }
+    const out = new Uint8Array(total);
+    let at = 0;
+    for (const part of parts) {
+      out.set(part, at);
+      at += part.length;
+    }
+    return { name, type, bytes: out.subarray(0, Math.min(dataLen, out.length)) };
+  }
+
+  return { name, type, bytes: cell.subarray(4, Math.min(4 + dataLen, cell.length)) };
 }
 
 export const registry: Parser = {
@@ -815,7 +934,7 @@ export const registry: Parser = {
   },
 };
 
-function asciiBytes(buf: Uint8Array): string {
+export function asciiBytes(buf: Uint8Array): string {
   let s = '';
   for (let i = 0; i < buf.length; i++) {
     if (buf[i] === 0) break;

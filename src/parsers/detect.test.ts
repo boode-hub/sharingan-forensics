@@ -27,7 +27,26 @@ describe('registry detection', () => {
     expect(missing).toEqual([]);
   });
 
-  for (const dir of dirs.filter((d) => parsers.some((p) => p.id === d))) {
+  for (const p of parsers.filter((x) => x.manual)) {
+    it(`${p.id}: is never chosen automatically`, async () => {
+      // A manual parser reads a structure inside another artifact, so the file
+      // it reads belongs to a different parser. Claiming it would take that
+      // artifact away from the parser that owns it.
+      const samples = readdirSync(join(FIXTURES, p.id)).filter(
+        (f) => !f.endsWith('.json') && !f.endsWith('.mjs') && !f.endsWith('.md'),
+      );
+      expect(samples.length).toBeGreaterThan(0);
+      for (const s of samples) {
+        const buf = new Uint8Array(readFileSync(join(FIXTURES, p.id, s)));
+        const chosen = await detect(bufReader(buf, s));
+        expect(chosen?.id, `${p.id}/${s}`).not.toBe(p.id);
+      }
+    });
+  }
+
+  for (const dir of dirs.filter((d) =>
+    parsers.some((p) => p.id === d && !p.manual),
+  )) {
     // A fixture directory may carry a reject.json naming samples that detect()
     // must deliberately NOT claim, such as a PE executable filed with the
     // registry hives to prove the signature check works.

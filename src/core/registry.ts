@@ -25,9 +25,10 @@ export async function detect(reader: Reader): Promise<Parser | null> {
   const head = await reader.bytes(0, 512);
   const name = reader.name.toLowerCase();
   const ext = name.slice(name.lastIndexOf('.'));
-  const hits = parsers.filter((p) => p.sniff(head, name));
+  const candidates = parsers.filter((p) => !p.manual);
+  const hits = candidates.filter((p) => p.sniff(head, name));
   if (hits.length) return hits[0];
-  return parsers.find((p) => p.extensions.includes(ext)) ?? null;
+  return candidates.find((p) => p.extensions.includes(ext)) ?? null;
 }
 
 /**

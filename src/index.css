@@ -459,3 +459,20 @@ main {
   padding: 2px 0;
   overflow-wrap: anywhere;
 }
+
+/* Reading one artifact a second way, such as a hive as its shell bags. */
+.parseas {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--dim);
+}
+.parseas select {
+  font: inherit;
+  color: var(--fg);
+  background: var(--panel, #1b1b1b);
+  border: 1px solid var(--line, #333);
+  border-radius: 3px;
+  padding: 2px 4px;
+}

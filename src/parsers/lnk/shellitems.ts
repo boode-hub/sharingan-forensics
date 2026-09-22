@@ -191,6 +191,22 @@ function beefPosition(b: Uint8Array): number {
   return -1;
 }
 
+/** Control panel categories, keyed by the byte at offset 8 as he reads it. */
+const CONTROL_PANEL_CATEGORIES: Record<number, string> = {
+  0x00: 'All Control Panel Items',
+  0x01: 'Appearance and Personalization',
+  0x02: 'Hardware and Sound',
+  0x03: 'Network and Internet',
+  0x04: 'Sound, Speech and Audio Devices',
+  0x05: 'System and Security',
+  0x06: 'Clock, Language, and Region',
+  0x07: 'Ease of Access',
+  0x08: 'Programs',
+  0x09: 'User Accounts',
+  0x0a: 'Security Center',
+  0x0b: 'Mobile PC',
+};
+
 function emptyItem(type: number, offset: number): ShellItem {
   return {
     friendlyName: 'Unknown',
@@ -326,8 +342,18 @@ export function parseShellItem(
       case 0x2e:
         return guidEntry(b, type, offset, guidNames, 'Device');
 
-      case 0x71:
-        return guidEntry(b, type, offset, guidNames, 'Control Panel');
+      case 0x71: {
+        // His ShellBag0X71: the GUID sits at 14, not 4, except for two shapes
+        // where it is back at 4.
+        const item = emptyItem(type, offset);
+        item.friendlyName = 'GUID: Control panel';
+        let at = 14;
+        if (b[2] === 0x4d || b.length === 0x16) at = 4;
+        if (at + 16 > b.length) return item;
+        const g = guid(b.subarray(at, at + 16));
+        item.value = guidNames[g] ?? `Unmapped GUID: ${g}`;
+        return item;
+      }
 
       case 0x2a:
       case 0x2f: {
@@ -402,23 +428,54 @@ export function parseShellItem(
         return item;
       }
 
+      case 0x01: {
+        const item = emptyItem(type, offset);
+        item.friendlyName = 'Control Panel Category';
+        if (b.length < 10) return item;
+        const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+
+        // Hyper-V browsing puts a drive letter here instead.
+        if (b[8] === 0x3a && b[9] === 0x00) {
+          item.friendlyName = 'Hyper-V storage volume';
+          item.value = b.length > 0x32 ? utf16Raw(b.subarray(0x32)).replace(/\0/g, '') : '';
+          return item;
+        }
+
+        if (dv.getUint32(4, true) !== 0x39de2184) {
+          item.value = b.length > 14 ? utf16Raw(b.subarray(14)).replace(/\0/g, '') : '';
+          return item;
+        }
+
+        item.value = CONTROL_PANEL_CATEGORIES[b[8]] ?? `Category ${b[8]}`;
+        return item;
+      }
+
       case 0x00: {
-        // Variable-type item. His ShellBag0X00 reads several shapes; the name
-        // is the only part that reaches the path, so take the first readable
-        // string rather than guessing at the rest.
         const item = emptyItem(type, offset);
         item.friendlyName = 'Variable';
-        const w = wstr(b, 4);
-        item.value = w.length > 1 ? w : cstr(b, 4);
+        if (b.length < 8) return item;
+        const signature = new DataView(b.buffer, b.byteOffset, b.byteLength).getUint32(4, true);
+        if (signature === 0xc001b000) {
+          // A URL container: the address is a NUL-terminated string near the end.
+          item.friendlyName = 'Variable: URI';
+          item.value = wstr(b, 0x28).replace(/\0/g, '');
+          return item;
+        }
+        if (signature === 0x49534647) {
+          item.friendlyName = 'Variable: Game folder';
+          return item;
+        }
+        // Anything else is a users property view, whose name lives in a
+        // property store we do not decode. Reporting it unnamed is honest;
+        // scraping the nearest run of bytes would put invented text into a
+        // path an analyst may rely on.
+        item.friendlyName = 'Variable: Users property view';
         return item;
       }
 
       default: {
         const item = emptyItem(type, offset);
         item.friendlyName = `Unmodelled shell item type 0x${type.toString(16)}`;
-        // Show whatever text the item carries so the entry is not simply blank.
-        const w = wstr(b, 4);
-        item.value = w.length > 1 ? w : cstr(b, 4);
         return item;
       }
     }

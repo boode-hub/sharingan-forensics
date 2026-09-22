@@ -51,6 +51,15 @@ export interface Parser {
   /** Lowercase, dot-prefixed. `[]` means match by magic bytes only. */
   extensions: string[];
   columns: Column[];
+  /**
+   * Never chosen automatically, only when an analyst asks for it.
+   *
+   * Some artifacts live inside another one: shell bags are a structure within
+   * a registry hive, not a file. Dropping a UsrClass.dat should give the hive,
+   * because that is what the file is; reading it as shell bags is a second
+   * question about the same bytes, and the analyst is the one who asks it.
+   */
+  manual?: boolean;
   /** Cheap check against the first 512 bytes + filename. No I/O. */
   sniff(head: Uint8Array, filename: string): boolean;
   parse(reader: Reader, ctx: Ctx): AsyncIterable<Row>;

@@ -15,6 +15,11 @@ export default function App() {
   const [bigFiles, setBigFiles] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
   const [known, setKnown] = useState<ParserInfo[]>([]);
+  // The file behind each result, so it can be read again as something else.
+  // Some artifacts are a structure inside another: shell bags live in a
+  // registry hive, and which of the two you want is a question only the
+  // analyst can answer.
+  const opened = useRef(new Map<number, { file: File; siblings?: File[] }>());
   const worker = useRef<Worker>(null);
 
   useEffect(() => {
@@ -53,8 +58,13 @@ export default function App() {
       const siblings = all.filter(
         (f) => f !== file && f.name.toLowerCase().startsWith(`${file.name.toLowerCase()}.log`),
       );
+      const id = nextId++;
+      opened.current.set(id, {
+        file,
+        siblings: siblings.length > 0 ? siblings : undefined,
+      });
       worker.current?.postMessage({
-        id: nextId++,
+        id,
         file,
         siblings: siblings.length > 0 ? siblings : undefined,
       } satisfies WorkRequest);
@@ -62,6 +72,23 @@ export default function App() {
   }, []);
 
   const current = results.find((r) => r.id === sel);
+
+  /** Reads the selected artifact again with a parser the analyst picked. */
+  const reparse = useCallback((id: number, parserId: string) => {
+    const source = opened.current.get(id);
+    if (!source) return;
+    setBusy((n) => n + 1);
+    // Replaces the row in place: the same file read two ways is one artifact
+    // with a different question asked of it, not two artifacts.
+    setResults((rs) => rs.filter((r) => r.id !== id));
+    opened.current.set(id, source);
+    worker.current?.postMessage({
+      id,
+      file: source.file,
+      siblings: source.siblings,
+      parserId,
+    } satisfies WorkRequest);
+  }, []);
 
   return (
     <div
@@ -176,8 +203,21 @@ export default function App() {
                   onChange={(e) => setFilter(e.target.value)}
                 />
                 <span className="spacer" />
+                <label className="parseas">
+                  Read as
+                  <select
+                    value={current.parser.id}
+                    onChange={(e) => reparse(current.id, e.target.value)}
+                  >
+                    {known.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.ezTool})
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <span className="stat">
-                  {current.parser.name} · {bytes(current.fileSize)} · {current.ms} ms
+                  {bytes(current.fileSize)} · {current.ms} ms
                 </span>
                 <button
                   type="button"

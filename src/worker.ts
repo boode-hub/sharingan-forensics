@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import { blobReader } from './core/reader';
 import { byId, detect, parsers, run } from './core/registry';
-import type { Column } from './core/types';
+import type { Column, Table } from './core/types';
 import './parsers';
 
 export interface WorkRequest {
@@ -36,7 +36,7 @@ export interface WorkResult {
   id: number;
   fileName: string;
   fileSize: number;
-  parser?: { id: string; name: string; ezTool: string; columns: Column[] };
+  parser?: { id: string; name: string; ezTool: string; columns: Column[]; tables?: Table[] };
   rows?: Record<string, unknown>[];
   warnings?: { offset: number; message: string }[];
   ms?: number;
@@ -84,6 +84,7 @@ self.onmessage = async (e: MessageEvent<WorkRequest>) => {
       name: parser.name,
       ezTool: parser.ezTool,
       columns: parser.columns,
+      tables: parser.tables,
     },
     rows: outcome.rows,
     warnings: outcome.warnings,

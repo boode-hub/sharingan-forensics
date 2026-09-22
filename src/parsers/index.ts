@@ -8,6 +8,7 @@
  * registered parser.
  */
 import { register } from '../core/registry';
+import { amcache } from './amcache';
 import { appCompatCache } from './appcompatcache';
 import { evtx } from './evtx';
 import { lnk } from './lnk';
@@ -16,6 +17,8 @@ import { registry } from './registry';
 import { shellbags } from './shellbags';
 import { recycleBin } from './recyclebin';
 
-register(recycleBin, prefetch, evtx, lnk, registry, shellbags, appCompatCache);
+// Amcache before the plain hive: both claim a regf file, and an Amcache.hve
+// is read as Amcache first.
+register(recycleBin, prefetch, evtx, lnk, amcache, registry, shellbags, appCompatCache);
 
-export { recycleBin, prefetch, evtx, lnk, registry, shellbags, appCompatCache };
+export { recycleBin, prefetch, evtx, lnk, amcache, registry, shellbags, appCompatCache };

@@ -446,6 +446,42 @@ main {
   border-bottom: 1px solid var(--border);
   background: var(--bg-base);
 }
+/* One tab per kind of record, as his tools write one CSV per kind. */
+.tables {
+  display: flex;
+  gap: 2px;
+  padding: 6px 12px 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-base);
+}
+.tables button {
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tables button:hover {
+  color: var(--text);
+}
+.tables button.on {
+  border-color: var(--border);
+  background: var(--bg-deep);
+  color: var(--accent);
+  font-weight: 600;
+  margin-bottom: -1px;
+}
+.tables .count {
+  font-family: var(--mono);
+  font-size: 11px;
+  opacity: 0.7;
+}
 .search {
   flex: 1 1 260px;
   min-width: 200px;

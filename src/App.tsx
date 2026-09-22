@@ -34,6 +34,7 @@ export default function App() {
   const [bigFiles, setBigFiles] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
   const [known, setKnown] = useState<ParserInfo[]>([]);
+  const [tableId, setTableId] = useState('');
 
   const [position, setPosition] = useState<DetailPosition>(() =>
     read('detailPosition', 'bottom', isPosition),
@@ -121,8 +122,29 @@ export default function App() {
   }, []);
 
   const current = results.find((r) => r.id === sel);
-  const columns = useMemo(() => current?.parser?.columns ?? [], [current]);
-  const parserId = current?.parser?.id ?? '';
+
+  // An artifact with several kinds of record shows one table at a time, as
+  // his tools write one CSV per kind. Only tables with rows are offered, so
+  // an Amcache hive shows its own layout's tables and not the other one's.
+  const tables = useMemo(() => {
+    const declared = current?.parser?.tables;
+    if (!declared || !current?.rows) return [];
+    const counts = new Map<unknown, number>();
+    for (const r of current.rows) counts.set(r.table, (counts.get(r.table) ?? 0) + 1);
+    const withRows = declared.filter((t) => counts.has(t.id));
+    return (withRows.length > 0 ? withRows : declared.slice(0, 1)).map((t) => ({
+      ...t,
+      count: counts.get(t.id) ?? 0,
+    }));
+  }, [current]);
+  const table = tables.find((t) => t.id === tableId) ?? tables[0];
+  const columns = useMemo(() => table?.columns ?? current?.parser?.columns ?? [], [table, current]);
+  const rows = useMemo(
+    () => (table ? (current?.rows ?? []).filter((r) => r.table === table.id) : (current?.rows ?? [])),
+    [table, current],
+  );
+  // Saved filters belong to a table, since column filters name its columns.
+  const parserId = current?.parser ? current.parser.id + (table ? `/${table.id}` : '') : '';
 
   /** Reads the selected artifact again with a parser the analyst picked. */
   const reparse = useCallback((id: number, pid: string) => {
@@ -131,6 +153,7 @@ export default function App() {
     setBusy((n) => n + 1);
     setRow(null);
     setColFilters({});
+    setTableId('');
     // Replaces the row in place: the same file read two ways is one artifact
     // with a different question asked of it, not two artifacts.
     setResults((rs) => rs.filter((r) => r.id !== id));
@@ -170,8 +193,8 @@ export default function App() {
   const activeRule = sigmaActive ? sigmaRule : null;
 
   const sigmaMatched = useMemo(
-    () => (activeRule && current?.rows ? current.rows.filter(activeRule.test).length : 0),
-    [activeRule, current],
+    () => (activeRule ? rows.filter(activeRule.test).length : 0),
+    [activeRule, rows],
   );
 
   const runRule = () => {
@@ -206,10 +229,10 @@ export default function App() {
 
   const commitSave = () => {
     const name = (saving ?? '').trim();
-    if (!name || !current?.parser) return;
+    if (!name || !parserId) return;
     const next = upsert(saved, {
       name,
-      parserId: current.parser.id,
+      parserId,
       search,
       columns: Object.fromEntries(Object.entries(colFilters).filter(([, v]) => v.trim())),
       sigma: sigmaActive,
@@ -344,6 +367,7 @@ export default function App() {
                     setRow(null);
                     setSearch('');
                     setColFilters({});
+                    setTableId('');
                     setAppliedSaved('');
                   }}
                 >
@@ -500,7 +524,11 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() =>
-                    download(`${current.fileName}.csv`, toCsv(columns, current.rows!), 'text/csv')
+                    download(
+                      `${current.fileName}${table ? `_${table.label}` : ''}.csv`,
+                      toCsv(columns, rows),
+                      'text/csv',
+                    )
                   }
                 >
                   CSV
@@ -508,12 +536,38 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() =>
-                    download(`${current.fileName}.json`, toJson(current.rows!), 'application/json')
+                    download(
+                      `${current.fileName}${table ? `_${table.label}` : ''}.json`,
+                      toJson(rows),
+                      'application/json',
+                    )
                   }
                 >
                   JSON
                 </button>
               </div>
+
+              {tables.length > 0 && (
+                <div className="tables" role="tablist" aria-label="Tables in this artifact">
+                  {tables.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={t.id === table?.id}
+                      className={t.id === table?.id ? 'on' : ''}
+                      onClick={() => {
+                        setTableId(t.id);
+                        setRow(null);
+                        setColFilters({});
+                        setAppliedSaved('');
+                      }}
+                    >
+                      {t.label} <span className="count">{t.count.toLocaleString()}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {sigmaOpen && (
                 <SigmaPanel
@@ -526,7 +580,7 @@ export default function App() {
                   error={sigmaError}
                   working={sigmaWorking}
                   matched={sigmaMatched}
-                  total={current.rows.length}
+                  total={rows.length}
                 />
               )}
 
@@ -549,7 +603,7 @@ export default function App() {
               <div className={`workspace ${position}`}>
                 <Grid
                   columns={columns}
-                  rows={current.rows}
+                  rows={rows}
                   filter={search}
                   colFilters={colFilters}
                   onColFilters={setColFilters}

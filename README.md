@@ -21,6 +21,7 @@ phase plan.
 |---|---|---|
 | Event logs (`.evtx`) | EvtxECmd | BinXML, all 468 of his event maps, hidden-record detection; XML matches Windows' own rendering |
 | Registry hives | Registry Explorer | deleted key and value recovery, value slack, transaction log replay (open the `.LOG1`/`.LOG2` with the hive) |
+| Amcache (`Amcache.hve`) | AmcacheParser | Windows 8 and Windows 10+ layouts, one tab per CSV he writes (file entries, programs, shortcuts, devices, drivers), deleted entries included |
 | Shell bags | Shell Bags Explorer | from UsrClass.dat or NTUSER.DAT via **Read as** |
 | Shimcache | AppCompatCacheParser | from a SYSTEM hive via **Read as**, XP to Windows 11 |
 | Prefetch (`.pf`) | PECmd | versions 17 to 31, every file, directory and MFT reference |

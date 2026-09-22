@@ -41,6 +41,16 @@ export interface Column {
   secondary?: boolean;
 }
 
+/**
+ * One of several kinds of record an artifact holds, as his tools write one CSV
+ * per kind (AmcacheParser's ProgramEntries, ShortCuts, DriverBinaries...).
+ */
+export interface Table {
+  id: string;
+  label: string;
+  columns: Column[];
+}
+
 export interface Parser {
   /** Stable slug, used in URLs and exports. */
   id: string;
@@ -51,6 +61,12 @@ export interface Parser {
   /** Lowercase, dot-prefixed. `[]` means match by magic bytes only. */
   extensions: string[];
   columns: Column[];
+  /**
+   * For an artifact with several kinds of record, one table per kind. Each row
+   * then carries `table`, the id of the table it belongs to, and has that
+   * table's columns; `columns` is the first table's.
+   */
+  tables?: Table[];
   /**
    * Never chosen automatically, only when an analyst asks for it.
    *

@@ -2,6 +2,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Column, Row } from '../core/types';
 import { fmt } from './format';
+import { compileQuery, QueryError, type Predicate } from './query';
 
 const ROW_H = 26;
 const HEAD_H = 26;
@@ -27,79 +28,49 @@ function compare(a: unknown, b: unknown): number {
   return fmt(a).localeCompare(fmt(b), undefined, { numeric: true });
 }
 
-/**
- * Matches one cell against one column filter expression.
- *
- * Plain text is a case-insensitive substring match, which is what an analyst
- * reaches for most of the time. The operators exist because substring alone
- * cannot express the two questions forensics actually asks of a large table:
- * "only this window of time" and "only these ids".
- *
- *   4624          contains "4624"
- *   !svchost      does NOT contain "svchost"
- *   >=2019-02-13  on or after that instant — dates compare as time, not text
- *   <100          numerically less than 100
- *   =4624         exactly equal, so 4624 does not also match 14624
- */
-export function matches(value: unknown, expr: string): boolean {
-  const e = expr.trim();
-  if (!e) return true;
-  if (e.startsWith('!')) return !matches(value, e.slice(1));
-
-  const op = /^(>=|<=|>|<|=)(.*)$/.exec(e);
-  if (!op) return fmt(value).toLowerCase().includes(e.toLowerCase());
-
-  const [, operator, raw] = op;
-  const operand = raw.trim();
-  if (!operand) return true;
-
-  // Compare as time when the cell is a date and as number when both sides are
-  // numeric; fall back to text so the operators still behave sensibly on
-  // strings rather than silently matching nothing.
-  let a: number | string;
-  let b: number | string;
-  if (value instanceof Date) {
-    // Cells are displayed as ISO UTC, so a bare "2019-02-13T15:00" must mean
-    // 15:00 UTC too. JavaScript would otherwise read a date-time with no zone
-    // as LOCAL time, so the same text would select a different set of events
-    // depending on the analyst's machine — unacceptable in forensic output.
-    const hasZone = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(operand);
-    const t = Date.parse(hasZone || !operand.includes('T') ? operand : `${operand}Z`);
-    if (Number.isNaN(t)) return false;
-    a = value.getTime();
-    b = t;
-  } else if (typeof value === 'number' && operand !== '' && !Number.isNaN(Number(operand))) {
-    a = value;
-    b = Number(operand);
-  } else {
-    a = fmt(value).toLowerCase();
-    b = operand.toLowerCase();
+/** Compiles a filter, turning a mistake into a message rather than a crash. */
+function compile(
+  text: string,
+  columns: Column[],
+  defaultField?: string,
+): { test: Predicate; error: string | null } {
+  try {
+    return { test: compileQuery(text, columns, defaultField), error: null };
+  } catch (e) {
+    // A filter that cannot be read matches nothing, and says why. Showing every
+    // row instead would present an unfiltered table as if it were the answer.
+    return { test: () => false, error: e instanceof QueryError ? e.message : String(e) };
   }
-
-  if (operator === '=') return a === b;
-  if (operator === '>') return a > b;
-  if (operator === '<') return a < b;
-  if (operator === '>=') return a >= b;
-  return a <= b;
 }
 
 export function Grid({
   columns,
   rows,
   filter,
+  colFilters,
+  onColFilters,
+  extra,
+  extraLabel,
   partial,
   onSelect,
 }: {
   columns: Column[];
   rows: Row[];
+  /** The search box, in the filter language. */
   filter: string;
+  /** Per-column filters, keyed by column key. Owned by the caller so they can be saved. */
+  colFilters: Record<string, string>;
+  onColFilters: (f: Record<string, string>) => void;
+  /** A further test every row must pass, such as a Sigma rule. */
+  extra?: Predicate | null;
+  /** What `extra` is, for the footer. */
+  extraLabel?: string;
   /** The parser stopped early, so these rows are not the whole artifact. */
   partial?: boolean;
   onSelect: (r: Row) => void;
 }) {
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 } | null>(null);
   const [active, setActive] = useState(-1);
-  const [colFilters, setColFilters] = useState<Record<string, string>>({});
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [pickerOpen, setPickerOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -109,11 +80,10 @@ export function Grid({
   // not know exists.
   const visible = useMemo(() => columns.filter((c) => !hidden.has(c.key)), [columns, hidden]);
 
-  // A new artifact has different columns, so drop stale hides and filters.
+  // A new artifact has different columns, so drop stale hides and sorting.
   const colKey = columns.map((c) => c.key).join('|');
   useEffect(() => {
     setHidden(new Set());
-    setColFilters({});
     setSort(null);
     setActive(-1);
   }, [colKey]);
@@ -123,22 +93,30 @@ export function Grid({
     [colFilters],
   );
 
+  const global = useMemo(() => compile(filter, columns), [filter, columns]);
+  const perColumn = useMemo(
+    () => activeCols.map(([key, expr]) => ({ key, ...compile(expr, columns, key) })),
+    [activeCols, columns],
+  );
+  const errors = [
+    global.error ? `Search: ${global.error}` : null,
+    ...perColumn
+      .filter((c) => c.error)
+      .map((c) => `${columns.find((x) => x.key === c.key)?.label ?? c.key}: ${c.error}`),
+  ].filter(Boolean) as string[];
+
   const view = useMemo(() => {
-    const q = filter.trim().toLowerCase();
-    // The global box matches across every column, including hidden ones — an
+    // The search box matches across every column, including hidden ones — an
     // analyst searching for a path should not have to know which column holds
-    // it. Per-column filters then narrow that, ANDed together.
-    let out = q
-      ? rows.filter((r) => columns.some((c) => fmt(r[c.key]).toLowerCase().includes(q)))
-      : rows;
-    if (activeCols.length) {
-      out = out.filter((r) => activeCols.every(([key, expr]) => matches(r[key], expr)));
-    }
+    // it. Column filters and any rule then narrow that, all ANDed together.
+    let out = filter.trim() ? rows.filter(global.test) : rows;
+    if (perColumn.length) out = out.filter((r) => perColumn.every((c) => c.test(r)));
+    if (extra) out = out.filter(extra);
     if (sort) {
       out = [...out].sort((a, b) => compare(a[sort.key], b[sort.key]) * sort.dir);
     }
     return out;
-  }, [rows, columns, filter, sort, activeCols]);
+  }, [rows, filter, global, perColumn, extra, sort]);
 
   const virt = useVirtualizer({
     count: view.length,
@@ -155,7 +133,7 @@ export function Grid({
     setSort((s) => (s?.key !== key ? { key, dir: 1 } : s.dir === 1 ? { key, dir: -1 } : null));
 
   const totalW = IDX_W + visible.reduce((n, c) => n + widthOf(c), 0);
-  const filtered = activeCols.length > 0 || filter.trim().length > 0;
+  const filtered = activeCols.length > 0 || filter.trim().length > 0 || !!extra;
 
   return (
     <div className="grid">
@@ -169,15 +147,24 @@ export function Grid({
           </button>
         )}
         {activeCols.length > 0 && (
-          <button type="button" className="colbtn warn" onClick={() => setColFilters({})}>
-            Clear {activeCols.length} filter{activeCols.length > 1 ? 's' : ''}
+          <button type="button" className="colbtn warn" onClick={() => onColFilters({})}>
+            Clear {activeCols.length} column filter{activeCols.length > 1 ? 's' : ''}
           </button>
         )}
         <span className="hint">
-          Filter a column: <code>4624</code> contains · <code>=4624</code> exact ·{' '}
-          <code>!x</code> excludes · <code>&gt;=2019-02-13</code> from that time (UTC)
+          <code>4624 OR 4625</code> · <code>admin AND -svchost</code> ·{' '}
+          <code>CommandLine contains "-enc"</code> · <code>EventId=4624</code> ·{' '}
+          <code>&gt;=2019-02-13</code> · <code>Image:*\cmd.exe</code>
         </span>
       </div>
+
+      {errors.length > 0 && (
+        <div className="query-error" role="alert">
+          {errors.map((e) => (
+            <div key={e}>Filter not understood — {e}. No rows are shown until it is fixed.</div>
+          ))}
+        </div>
+      )}
 
       {pickerOpen && (
         <div className="colpick">
@@ -232,8 +219,11 @@ export function Grid({
               <div className="cell" key={c.key} style={{ width: widthOf(c) }}>
                 <input
                   value={colFilters[c.key] ?? ''}
-                  placeholder={c.type === 'date' ? '>=2019-02-13' : c.type === 'num' ? '=4624' : 'filter'}
-                  onChange={(e) => setColFilters((f) => ({ ...f, [c.key]: e.target.value }))}
+                  aria-label={`Filter ${c.label}`}
+                  placeholder={
+                    c.type === 'date' ? '>=2019-02-13' : c.type === 'num' ? '4624 OR 4625' : 'filter'
+                  }
+                  onChange={(e) => onColFilters({ ...colFilters, [c.key]: e.target.value })}
                 />
               </div>
             ))}
@@ -276,7 +266,18 @@ export function Grid({
         Showing <strong>{view.length.toLocaleString()}</strong> of{' '}
         {rows.length.toLocaleString()} rows
         {filtered
-          ? ` — filtered${activeCols.length ? ` on ${activeCols.map(([k]) => columns.find((c) => c.key === k)?.label ?? k).join(', ')}` : ''}`
+          ? ` — filtered${
+              [
+                filter.trim() ? 'by search' : '',
+                activeCols.length
+                  ? `on ${activeCols.map(([k]) => columns.find((c) => c.key === k)?.label ?? k).join(', ')}`
+                  : '',
+                extra ? `by ${extraLabel ?? 'rule'}` : '',
+              ]
+                .filter(Boolean)
+                .map((s) => ` ${s}`)
+                .join(',') || ''
+            }`
           : partial
             ? ''
             : ' — everything in the file'}

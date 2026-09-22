@@ -1,13 +1,96 @@
+/* ==========================================================
+   4ENSICS — the Phishing Email Analyzer's HackTheBox theme.
+   The accent can be changed in Settings; everything that is
+   green is derived from --accent so it follows the choice.
+   ========================================================== */
+
+/* Inter and JetBrains Mono (SIL Open Font License 1.1, licences beside the
+   files), self-hosted so the page loads nothing from a third party. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url(./assets/fonts/inter-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308,
+    U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
+    U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url(./assets/fonts/inter-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url(./assets/fonts/jetbrains-mono-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308,
+    U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
+    U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url(./assets/fonts/jetbrains-mono-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
-  --bg: #0d1013;
-  --panel: #14181d;
-  --panel2: #1a1f26;
-  --line: #262d36;
-  --fg: #d8dee6;
-  --dim: #7d8794;
-  --accent: #e5484d;
-  --warn: #d9a441;
-  --mono: ui-monospace, "Cascadia Mono", "Consolas", monospace;
+  /* Backgrounds — HTB layered system */
+  --bg-deep: #0d1117;
+  --bg-base: #161b22;
+  --bg-elevated: #21262d;
+  --bg-surface: #30363d;
+
+  /* Accent — HTB brand green by default; Settings can change it */
+  --accent: #9fef00;
+  --accent-bg: color-mix(in srgb, var(--accent) 8%, transparent);
+  --accent-border: color-mix(in srgb, var(--accent) 30%, transparent);
+  --accent-glow: color-mix(in srgb, var(--accent) 22%, transparent);
+  --accent-ink: #0d1117;
+
+  /* Severity colours stay fixed, so they keep their meaning whatever the accent */
+  --red: #ff7b72;
+  --red-bg: rgba(255, 123, 114, 0.08);
+  --orange: #f0883e;
+  --yellow: #d29922;
+  --yellow-bg: rgba(210, 153, 34, 0.1);
+  --blue: #58a6ff;
+  --purple: #bc8cff;
+
+  --text: #e6edf3;
+  --text-secondary: #8b949e;
+  --text-muted: #6e7681;
+  --border: #30363d;
+  --border-light: #21262d;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --transition: 0.15s ease-in-out;
+
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+
+  /* Short names the grid styles use */
+  --bg: var(--bg-deep);
+  --panel: var(--bg-base);
+  --panel2: var(--bg-elevated);
+  --line: var(--border);
+  --fg: var(--text);
+  --dim: var(--text-secondary);
+  --warn: var(--yellow);
+
   color-scheme: dark;
 }
 
@@ -23,15 +106,32 @@ body,
 }
 
 body {
-  background: var(--bg);
-  color: var(--fg);
-  font: 13px/1.5 system-ui, sans-serif;
+  background: var(--bg-deep);
+  color: var(--text);
+  font: 13px/1.55 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
   color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+::selection {
+  background: var(--accent-glow);
+}
+
+.spacer {
+  flex: 1;
 }
 
 .app {
@@ -40,40 +140,170 @@ input {
   height: 100%;
 }
 .app.dragging::after {
-  content: "Drop to parse";
+  content: 'Drop to parse';
   position: fixed;
   inset: 0;
-  z-index: 10;
+  z-index: 50;
   display: grid;
   place-items: center;
-  background: #0d1013cc;
+  background: color-mix(in srgb, var(--bg-deep) 85%, transparent);
   border: 2px dashed var(--accent);
-  font-size: 20px;
-  letter-spacing: 0.04em;
+  color: var(--accent);
+  font: 600 22px var(--mono);
+  letter-spacing: 0.1em;
 }
 
-header {
+/* ---------------------------------------------------------------- header -- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 18px;
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 0 var(--accent-bg);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.logo {
+  flex: none;
+  filter: drop-shadow(0 0 6px var(--accent-glow));
+}
+.logo-iris {
+  fill: #000;
+}
+.logo-ring {
+  fill: none;
+  stroke: var(--accent);
+}
+.logo-ink {
+  fill: var(--accent);
+}
+
+/* The wordmark: a heavy monospace 4ENSICS whose "4" carries the accent, with
+   the same sideways glitch as the logo when you hover it. */
+.wordmark {
+  margin: 0;
+  font: 800 22px/1 var(--mono);
+  letter-spacing: 0.14em;
   display: flex;
   align-items: baseline;
-  gap: 16px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
 }
-header h1 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
+.wordmark .four {
+  color: var(--accent);
+  text-shadow: 0 0 10px var(--accent-glow);
+  margin-right: 0.04em;
+}
+.wordmark .rest {
+  color: var(--text);
+}
+.brand:hover .wordmark .four {
+  animation: glitch 0.45s steps(2, end) 1;
+}
+@keyframes glitch {
+  0% { text-shadow: 3px 0 var(--red), -3px 0 var(--blue); transform: translateX(-1px); }
+  50% { text-shadow: -2px 0 var(--red), 2px 0 var(--blue); transform: translateX(2px); }
+  100% { text-shadow: 0 0 10px var(--accent-glow); transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand:hover .wordmark .four {
+    animation: none;
+  }
+}
+.tagline {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 11.5px;
   letter-spacing: 0.02em;
 }
-header h1 span {
+
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 16px;
+  transition: border-color var(--transition), color var(--transition);
+}
+.icon-btn:hover,
+.icon-btn[aria-expanded='true'] {
+  border-color: var(--accent);
   color: var(--accent);
 }
-.privacy {
+
+.settings {
+  position: relative;
+}
+.settings-pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 40;
+  width: 300px;
+  padding: 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  display: grid;
+  gap: 12px;
+}
+.setting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.setting > span {
+  flex: 1;
+  color: var(--text-secondary);
+}
+.setting input[type='color'] {
+  width: 36px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+}
+.settings-note {
   margin: 0;
-  color: var(--dim);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.segmented button {
+  padding: 4px 10px;
+  background: var(--bg-base);
+  border: 0;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
   font-size: 12px;
 }
+.segmented button:last-child {
+  border-right: 0;
+}
+.segmented button.on {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------ body -- */
 
 .body {
   display: flex;
@@ -84,24 +314,26 @@ header h1 span {
 aside {
   width: 270px;
   flex: none;
-  border-right: 1px solid var(--line);
-  background: var(--panel);
+  border-right: 1px solid var(--border);
+  background: var(--bg-base);
   padding: 12px;
   overflow: auto;
 }
 
 .pick {
   display: block;
-  padding: 9px 12px;
-  border: 1px dashed var(--line);
-  border-radius: 6px;
+  padding: 10px 12px;
+  border: 1px dashed var(--accent-border);
+  border-radius: var(--radius-md);
   text-align: center;
   cursor: pointer;
-  color: var(--dim);
+  color: var(--accent);
+  background: var(--accent-bg);
+  font-weight: 600;
+  transition: border-color var(--transition);
 }
 .pick:hover {
   border-color: var(--accent);
-  color: var(--fg);
 }
 .pick input {
   display: none;
@@ -109,34 +341,40 @@ aside {
 
 .busy,
 .hint {
-  color: var(--dim);
+  color: var(--text-secondary);
   font-size: 12px;
 }
 .hint code {
   font-family: var(--mono);
-  color: var(--fg);
+  color: var(--text);
 }
-
-/* One line per artifact the worker says it can read. */
 .hint .kinds {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin-top: 6px;
+  gap: 3px;
+  margin-top: 8px;
 }
 .hint .kinds span {
   display: flex;
   justify-content: space-between;
   gap: 8px;
 }
+.hint .kinds-note {
+  display: block;
+  margin-top: 8px;
+  color: var(--text-muted);
+}
+.hint .kinds-note strong {
+  color: var(--text-secondary);
+}
 
 .bigwarn {
   margin: 8px 0 0;
   padding: 6px 8px;
-  background: #2a2013;
-  border-left: 2px solid var(--warn);
+  background: var(--yellow-bg);
+  border-left: 2px solid var(--yellow);
   border-radius: 3px;
-  color: var(--warn);
+  color: var(--yellow);
   font-size: 11px;
   line-height: 1.4;
 }
@@ -159,10 +397,10 @@ aside {
   cursor: pointer;
 }
 .files button:hover {
-  background: var(--panel2);
+  background: var(--bg-elevated);
 }
 .files button.on {
-  background: var(--panel2);
+  background: var(--accent-bg);
   border-left-color: var(--accent);
 }
 .files .fn {
@@ -173,7 +411,7 @@ aside {
 }
 .files .meta {
   display: block;
-  color: var(--dim);
+  color: var(--text-secondary);
   font-size: 11px;
 }
 
@@ -186,58 +424,118 @@ main {
 
 .empty {
   margin: auto;
-  color: var(--dim);
+  color: var(--text-secondary);
   text-align: center;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
 }
 .empty.error strong {
-  color: var(--accent);
+  color: var(--red);
   font-family: var(--mono);
 }
 
+/* --------------------------------------------------------------- toolbar -- */
+
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-base);
 }
-.filter {
-  width: 280px;
-  padding: 5px 9px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 5px;
-}
-.filter:focus {
-  outline: 1px solid var(--accent);
-}
-.spacer {
-  flex: 1;
-}
-.stat {
-  color: var(--dim);
+.search {
+  flex: 1 1 260px;
+  min-width: 200px;
+  padding: 6px 10px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: var(--mono);
   font-size: 12px;
 }
-.toolbar button {
-  padding: 5px 11px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  cursor: pointer;
-}
-.toolbar button:hover {
+.search:focus {
+  outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-bg);
+}
+.search.bad {
+  border-color: var(--red);
+  box-shadow: 0 0 0 2px var(--red-bg);
+}
+.stat {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.toolbar button,
+.sigma-actions button,
+.setting button {
+  padding: 5px 11px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color var(--transition);
+}
+.toolbar button:hover:not(:disabled),
+.sigma-actions button:hover:not(:disabled),
+.setting button:hover {
+  border-color: var(--accent);
+}
+.toolbar button.on {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+.saved,
+.parseas select {
+  padding: 5px 6px;
+  color: var(--text);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  max-width: 180px;
+}
+.save-as {
+  display: inline-flex;
+  gap: 6px;
+}
+.save-as input {
+  width: 180px;
+  padding: 5px 8px;
+  background: var(--bg-deep);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+}
+.parseas {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .warnings {
-  border-bottom: 1px solid var(--line);
-  background: #2a2013;
+  border-bottom: 1px solid var(--border);
+  background: var(--yellow-bg);
   padding: 7px 12px;
   font-size: 12px;
 }
 .warnings summary {
   cursor: pointer;
-  color: var(--warn);
+  color: var(--yellow);
 }
 .warnings ul {
   margin: 6px 0 0;
@@ -247,12 +545,152 @@ main {
 }
 .warnings code {
   font-family: var(--mono);
-  color: var(--dim);
+  color: var(--text-secondary);
+}
+
+/* ----------------------------------------------------------------- sigma -- */
+
+.sigma {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.2fr) minmax(260px, 1fr);
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-base);
+  max-height: 44%;
+  overflow: auto;
+}
+.sigma-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.sigma textarea {
+  min-height: 170px;
+  resize: vertical;
+  padding: 8px 10px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font: 12px/1.5 var(--mono);
+  tab-size: 2;
+}
+.sigma textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.sigma-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sigma-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.sigma-result {
+  min-width: 0;
+  font-size: 12px;
+}
+.sigma-result p {
+  margin: 0 0 6px;
+}
+.sigma-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.sigma-count strong {
+  color: var(--accent);
+  font-size: 15px;
+}
+.sigma-desc,
+.sigma-idle {
+  color: var(--text-secondary);
+}
+.sigma-error {
+  color: var(--red);
+  padding: 6px 8px;
+  background: var(--red-bg);
+  border-left: 2px solid var(--red);
+  border-radius: 3px;
+}
+.sigma-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin: 6px 0;
+}
+.sigma-meta dt {
+  color: var(--text-muted);
+}
+.sigma-meta dd {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+.sigma-notes {
+  margin: 6px 0 0;
+  padding: 6px 8px 6px 22px;
+  background: var(--yellow-bg);
+  border-left: 2px solid var(--yellow);
+  border-radius: 3px;
+  color: var(--yellow);
+}
+.level {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font: 700 10.5px var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border: 1px solid currentColor;
+}
+.level-critical {
+  color: var(--red);
+}
+.level-high {
+  color: var(--orange);
+}
+.level-medium {
+  color: var(--yellow);
+}
+.level-low {
+  color: var(--blue);
+}
+.level-informational {
+  color: var(--text-secondary);
+}
+
+/* ------------------------------------------------------------- workspace -- */
+
+/* The grid and the row details share this area. Where the details sit is a
+   setting: underneath, or beside on the left or right. */
+.workspace {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.workspace.bottom {
+  flex-direction: column;
+}
+.workspace.left {
+  flex-direction: row-reverse;
+}
+.workspace.right {
+  flex-direction: row;
+}
+.workspace .grid {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
 }
 
 .grid {
-  flex: 1;
-  min-height: 0;
   display: flex;
   flex-direction: column;
 }
@@ -262,15 +700,15 @@ main {
   align-items: center;
   gap: 8px;
   padding: 5px 10px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-base);
   font-size: 12px;
 }
 .colbtn {
   padding: 3px 9px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 12px;
   white-space: nowrap;
@@ -279,21 +717,29 @@ main {
   border-color: var(--accent);
 }
 .colbtn.warn {
-  color: var(--warn);
-  border-color: var(--warn);
+  color: var(--yellow);
+  border-color: var(--yellow);
 }
 .grid-bar .hint {
-  color: var(--dim);
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .grid-bar code {
   font-family: var(--mono);
-  color: var(--fg);
-  background: var(--panel2);
-  padding: 0 3px;
+  color: var(--text);
+  background: var(--bg-elevated);
+  padding: 0 4px;
   border-radius: 3px;
+}
+
+.query-error {
+  padding: 6px 12px;
+  background: var(--red-bg);
+  border-bottom: 1px solid var(--red);
+  color: var(--red);
+  font-size: 12px;
 }
 
 .colpick {
@@ -301,8 +747,8 @@ main {
   flex-wrap: wrap;
   gap: 4px 14px;
   padding: 8px 10px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel2);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
   font-size: 12px;
   max-height: 25%;
   overflow: auto;
@@ -313,6 +759,9 @@ main {
   gap: 5px;
   cursor: pointer;
   white-space: nowrap;
+}
+.colpick input {
+  accent-color: var(--accent);
 }
 
 /* One scrolling surface: header, filter row and body share it, so they stay
@@ -332,9 +781,8 @@ main {
   position: sticky;
   top: 0;
   z-index: 3;
-  background: var(--panel2);
-  border-bottom: 1px solid var(--line);
-  font-family: var(--mono);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
   font-size: 12px;
   font-weight: 600;
 }
@@ -345,6 +793,7 @@ main {
   cursor: pointer;
   font-weight: 600;
   flex: none;
+  color: var(--text);
 }
 .grid-head .th:hover {
   color: var(--accent);
@@ -359,8 +808,8 @@ main {
   display: flex;
   position: sticky;
   z-index: 2;
-  background: var(--panel);
-  border-bottom: 1px solid var(--line);
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--border);
 }
 .grid-filters .cell {
   border-bottom: 0;
@@ -371,17 +820,19 @@ main {
   width: 100%;
   min-width: 0;
   padding: 2px 5px;
-  background: var(--bg);
-  border: 1px solid var(--line);
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
   border-radius: 3px;
   font-family: var(--mono);
   font-size: 11px;
 }
 .grid-filters input:focus {
-  outline: 1px solid var(--accent);
+  outline: none;
+  border-color: var(--accent);
 }
 .grid-filters input:not(:placeholder-shown) {
   border-color: var(--accent);
+  background: var(--accent-bg);
 }
 
 .grid-row {
@@ -391,12 +842,14 @@ main {
   display: flex;
   font-family: var(--mono);
   font-size: 12px;
+  cursor: pointer;
 }
 .grid-row:hover {
-  background: var(--panel);
+  background: var(--bg-base);
 }
 .grid-row.on {
-  background: var(--panel2);
+  background: var(--accent-bg);
+  box-shadow: inset 2px 0 var(--accent);
 }
 .cell {
   flex: none;
@@ -405,7 +858,7 @@ main {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  border-bottom: 1px solid #1b2026;
+  border-bottom: 1px solid var(--border-light);
 }
 .grid-head .cell {
   border-bottom: 0;
@@ -417,62 +870,114 @@ main {
 }
 .cell.idx {
   text-align: right;
-  color: var(--dim);
+  color: var(--text-muted);
 }
 .grid-foot {
   padding: 5px 12px;
-  border-top: 1px solid var(--line);
-  color: var(--dim);
+  border-top: 1px solid var(--border);
+  background: var(--bg-base);
+  color: var(--text-secondary);
   font-size: 12px;
 }
 .grid-foot .partial {
-  color: var(--warn);
+  color: var(--yellow);
   font-weight: 600;
 }
 .grid-foot strong {
-  color: var(--fg);
+  color: var(--accent);
 }
 
+/* ---------------------------------------------------------- row details -- */
+
 .detail {
-  max-height: 34%;
   overflow: auto;
-  border-top: 1px solid var(--line);
-  background: var(--panel);
-  padding: 10px 12px;
+  background: var(--bg-base);
+  font-size: 12px;
+}
+.detail.bottom {
+  height: 34%;
+  min-height: 90px;
+  border-top: 1px solid var(--border);
+  resize: vertical;
+}
+.detail.left,
+.detail.right {
+  width: 440px;
+  min-width: 260px;
+  max-width: 70%;
+  resize: horizontal;
+}
+.detail.right {
+  border-left: 1px solid var(--border);
+}
+.detail.left {
+  border-right: 1px solid var(--border);
+}
+.detail-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.detail-close {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text-secondary);
+}
+.detail-close:hover {
+  color: var(--accent);
 }
 .detail table {
   border-collapse: collapse;
   width: 100%;
-  font-size: 12px;
+  margin: 6px 0;
 }
 .detail th {
   text-align: left;
-  color: var(--dim);
+  color: var(--text-secondary);
   font-weight: 400;
-  padding: 2px 12px 2px 0;
+  padding: 3px 12px;
   white-space: nowrap;
   vertical-align: top;
   width: 1%;
 }
 .detail td {
   font-family: var(--mono);
-  padding: 2px 0;
+  padding: 3px 12px 3px 0;
   overflow-wrap: anywhere;
 }
-
-/* Reading one artifact a second way, such as a hive as its shell bags. */
-.parseas {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--dim);
+.detail .structured-row td {
+  padding: 8px 12px 4px;
 }
-.parseas select {
-  font: inherit;
-  color: var(--fg);
-  background: var(--panel, #1b1b1b);
-  border: 1px solid var(--line, #333);
-  border-radius: 3px;
-  padding: 2px 4px;
+.detail .structured-label {
+  color: var(--text-secondary);
+  font-family: var(--sans);
+  margin-bottom: 4px;
+}
+/* One element per line, always: a long line scrolls sideways rather than
+   wrapping into the next element. Widen the panel by dragging its corner. */
+.detail .structured {
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 60vh;
+  overflow: auto;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--accent-border);
+  border-radius: var(--radius-sm);
+  white-space: pre;
+  font: 11.5px/1.6 var(--mono);
+  color: var(--text);
 }

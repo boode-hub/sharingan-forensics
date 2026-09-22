@@ -23,6 +23,8 @@ export interface ParserInfo {
   name: string;
   ezTool: string;
   extensions: string[];
+  /** Reached through "Read as" on another artifact, never by dropping a file. */
+  manual: boolean;
 }
 
 export interface WorkerReady {
@@ -50,6 +52,7 @@ self.postMessage({
     name: p.name,
     ezTool: p.ezTool,
     extensions: p.extensions,
+    manual: p.manual === true,
   })),
 } satisfies WorkerReady);
 

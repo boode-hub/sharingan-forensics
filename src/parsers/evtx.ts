@@ -75,6 +75,7 @@ export const evtx: Parser = {
 
     let chunkNumber = 0;
     let foundChunks = 0;
+    let records = 0;
     let offset = HEADER_SIZE;
 
     while (offset < reader.size) {
@@ -157,6 +158,7 @@ export const evtx: Parser = {
           }
         }
 
+        records++;
         yield {
           // EvtxECmd's RecordNumber is this identifier from the record header,
           // not a running count of records read.
@@ -203,6 +205,12 @@ export const evtx: Parser = {
 
     if (foundChunks !== headerCount) {
       ctx.warn(0, `header claims ${headerCount} chunks but ${foundChunks} were found`);
+    }
+
+    // An empty log is a normal thing to find, but an empty grid with nothing
+    // said looks like a parser that gave up. Say which it is.
+    if (records === 0) {
+      ctx.warn(0, 'this log holds no records; the channel is enabled but nothing has been written to it');
     }
   },
 };

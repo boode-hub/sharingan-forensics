@@ -27,6 +27,7 @@ produce them.
 | `prefetch/DEVENV.EXE-854D7862.pf` | Real Windows 10 Prefetch from [EricZimmerman/Prefetch](https://github.com/EricZimmerman/Prefetch) test corpus, MIT licensed | as above |
 | `prefetch/CMD.EXE-087B4001.pf`, `EXPLORER.EXE-7A3328DA.pf`, `_CMD.EXE-4A81B364.pf`, `DCODEDCODEDCODEDCODEDCODEDCOD-E65B9FE8.pf` | From the same MIT-licensed corpus, one per prefetch version (17, 23, 26, 30). `prefetch.parity.test.ts` asserts his own published expectations against them, so they are an oracle he wrote rather than one we did. | as above |
 | `registry/` | Real hives from [EricZimmerman/Registry](https://github.com/EricZimmerman/Registry) test corpus, MIT licensed | ported from his source, see tasks/registry-hive.md |
+| `lnk/local.directory.seven.lnk`, `lnk/PhotosApp.lnk` | From the MIT-licensed [EricZimmerman/Lnk](https://github.com/EricZimmerman/Lnk) test corpus. `lnk.parity.test.ts` asserts his own published expectations against them. | [MS-SHLLINK](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-shllink/) |
 | `lnk/` | Created by Windows via `WScript.Shell` (see note below) | [MS-SHLLINK](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-shllink/) |
 
 ## Note on `lnk/notepad.lnk`

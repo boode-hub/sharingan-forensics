@@ -1,20 +1,19 @@
 {
-  "notepad.lnk": [
-    {
-      "targetPath": "C:\\Windows\\System32\\notepad.exe",
-      "arguments": "-test arg",
-      "workingDirectory": "C:\\Windows\\System32",
-      "description": "Generated fixture",
-      "iconLocation": "C:\\Windows\\System32\\notepad.exe",
-      "targetSize": 360448,
-      "targetCreated": "2026-09-18T23:53:04.735Z",
-      "targetModified": "2026-09-18T23:53:04.748Z",
-      "targetAccessed": "2026-09-20T08:35:27.444Z",
-      "driveType": "Fixed",
-      "driveSerial": "107F8885",
-      "volumeLabel": "",
-      "machineId": "TESTHOST",
-      "offset": 0
-    }
-  ]
+  "_comment": "The notepad.lnk fixture was created by asking WScript.Shell for a shortcut with these exact properties, so the values here are what was requested of Windows rather than what our parser produced. Only the fields the creating script set are listed; the test checks that the shortcut's own Target row carries them. See SOURCES.md for the two identifiers that were sanitized afterwards.",
+  "notepad.lnk": {
+    "entryType": "Target",
+    "path": "C:\\Windows\\System32\\notepad.exe",
+    "arguments": "-test arg",
+    "workingDirectory": "C:\\Windows\\System32",
+    "description": "Generated fixture",
+    "iconLocation": "C:\\Windows\\System32\\notepad.exe",
+    "localPath": "C:\\Windows\\System32\\notepad.exe",
+    "driveType": "DriveFixed",
+    "volumeSerialNumber": "107F8885",
+    "machineId": "TESTHOST",
+    "targetCreated": "2026-09-18T23:53:04.735Z",
+    "targetModified": "2026-09-18T23:53:04.748Z",
+    "targetAccessed": "2026-09-20T08:35:27.444Z",
+    "fileSize": 360448
+  }
 }

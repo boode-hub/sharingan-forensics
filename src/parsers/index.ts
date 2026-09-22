@@ -8,6 +8,7 @@
  * registered parser.
  */
 import { register } from '../core/registry';
+import { appCompatCache } from './appcompatcache';
 import { evtx } from './evtx';
 import { lnk } from './lnk';
 import { prefetch } from './prefetch';
@@ -15,6 +16,6 @@ import { registry } from './registry';
 import { shellbags } from './shellbags';
 import { recycleBin } from './recyclebin';
 
-register(recycleBin, prefetch, evtx, lnk, registry, shellbags);
+register(recycleBin, prefetch, evtx, lnk, registry, shellbags, appCompatCache);
 
-export { recycleBin, prefetch, evtx, lnk, registry, shellbags };
+export { recycleBin, prefetch, evtx, lnk, registry, shellbags, appCompatCache };

@@ -9,7 +9,7 @@
  *       https://github.com/EricZimmerman/evtx
  */
 import type { Column, Parser, Reader, Ctx, Row } from '../core/types';
-import { Cursor, magic } from '../core/binary';
+import { Cursor, filetime, magic } from '../core/binary';
 import { ChunkCache, decodeRecordBinXml, loadEventMaps, type DecodedRecord } from './evtx/binxml';
 
 const HEADER_SIZE = 4096;
@@ -42,14 +42,52 @@ const columns: Column[] = [
   { key: 'payloadData5', label: 'Payload Data5', type: 'str' },
   { key: 'payloadData6', label: 'Payload Data6', type: 'str' },
   { key: 'executableInfo', label: 'Executable Info', type: 'str' },
+  { key: 'hiddenRecord', label: 'Hidden Record', type: 'bool' },
   { key: 'sourceFile', label: 'Source File', type: 'str' },
   { key: 'keywords', label: 'Keywords', type: 'str' },
   { key: 'payload', label: 'Payload', type: 'str' },
   { key: 'writtenTime', label: 'Written Time (header)', type: 'date', secondary: true },
   { key: 'xml', label: 'XML', type: 'str', secondary: true },
   { key: 'chunkNumber', label: 'Chunk', type: 'num' },
+  { key: 'extraDataOffset', label: 'Extra Data Offset', type: 'num', secondary: true },
   { key: 'offset', label: 'Offset', type: 'num' },
 ];
+
+/**
+ * Looks for a second event record hidden in the slack after a record's BinXML.
+ *
+ * Writing one record inside another is how the DanderSpritz eventlogedit
+ * module hides an event: the outer record's size covers both, so a reader that
+ * stops at the end of the first BinXML stream never sees the second. EvtxECmd
+ * looks for the 0x2a2a signature within fifteen bytes of where the stream
+ * ended, which is what this does.
+ *
+ * Returns the offset of the hidden record within the chunk, or null.
+ */
+function findHiddenRecord(
+  chunk: Uint8Array,
+  recordStart: number,
+  binXmlEndInChunk: number,
+  recordEnd: number,
+  outerId: bigint,
+): number | null {
+  const limit = Math.min(binXmlEndInChunk + 15, recordEnd - 1);
+  for (let at = binXmlEndInChunk; at < limit; at++) {
+    if (chunk[at] !== 0x2a || chunk[at + 1] !== 0x2a) continue;
+    // The record signature 0x00002a2a is written 2a 2a 00 00, so the record
+    // begins at the first 0x2a rather than before it.
+    const start = at;
+    if (start < recordStart || start + 24 > recordEnd) return null;
+
+    const view = new DataView(chunk.buffer, chunk.byteOffset + start, 24);
+    const size = view.getUint32(4, true);
+    const id = view.getBigUint64(8, true);
+    if (id === outerId) return null; // the same record, not a hidden one
+    if (size < 28 || start + size > recordEnd) return null;
+    return start;
+  }
+  return null;
+}
 
 export const evtx: Parser = {
   id: 'evtx',
@@ -158,6 +196,18 @@ export const evtx: Parser = {
           }
         }
 
+        // A record whose BinXML ends early may be concealing another one.
+        let hiddenAt: number | null = null;
+        if (decoded && !truncated) {
+          hiddenAt = findHiddenRecord(
+            chunk,
+            pos,
+            pos + 24 + decoded.binXmlEnd,
+            pos + size,
+            id,
+          );
+        }
+
         records++;
         yield {
           // EvtxECmd's RecordNumber is this identifier from the record header,
@@ -175,6 +225,7 @@ export const evtx: Parser = {
           userName: decoded?.userName ?? null,
           remoteHost: decoded?.remoteHost ?? null,
           executableInfo: decoded?.executableInfo ?? null,
+          hiddenRecord: false,
           payloadData1: decoded?.payloadData1 ?? null,
           payloadData2: decoded?.payloadData2 ?? null,
           payloadData3: decoded?.payloadData3 ?? null,
@@ -191,8 +242,69 @@ export const evtx: Parser = {
           chunkNumber,
           recordSize: size,
           dataLength: size - 28,
+          extraDataOffset: hiddenAt === null ? null : offset + hiddenAt,
           offset: offset + pos,
         };
+
+        if (hiddenAt !== null) {
+          const hv = new DataView(chunk.buffer, chunk.byteOffset + hiddenAt, 24);
+          const hiddenSize = hv.getUint32(4, true);
+          const hiddenId = hv.getBigUint64(8, true);
+          const hiddenWritten = filetime(hv.getBigUint64(16, true));
+
+          ctx.warn(
+            offset + hiddenAt,
+            `a second event record is hidden inside record ${id} — this is what DanderSpritz eventlogedit does to conceal an event`,
+          );
+
+          let hidden: DecodedRecord | null = null;
+          try {
+            hidden = decodeRecordBinXml(
+              chunk.subarray(hiddenAt + 24, Math.min(hiddenAt + hiddenSize - 4, chunk.length)),
+              hiddenAt + 24,
+              chunk,
+              chunkCache,
+            );
+          } catch (err) {
+            ctx.warn(offset + hiddenAt, `hidden record did not decode: ${(err as Error).message}`);
+          }
+
+          records++;
+          yield {
+            recordNumber: Number(hiddenId),
+            eventRecordId: hidden?.eventRecordId ?? null,
+            timeCreated: hidden?.timeCreated ?? hiddenWritten,
+            writtenTime: hiddenWritten,
+            eventId: hidden?.eventId ?? null,
+            level: hidden?.level ?? null,
+            provider: hidden?.provider ?? null,
+            channel: hidden?.channel ?? null,
+            computer: hidden?.computer ?? null,
+            mapDescription: hidden?.mapDescription ?? null,
+            userName: hidden?.userName ?? null,
+            remoteHost: hidden?.remoteHost ?? null,
+            executableInfo: hidden?.executableInfo ?? null,
+            hiddenRecord: true,
+            payloadData1: hidden?.payloadData1 ?? null,
+            payloadData2: hidden?.payloadData2 ?? null,
+            payloadData3: hidden?.payloadData3 ?? null,
+            payloadData4: hidden?.payloadData4 ?? null,
+            payloadData5: hidden?.payloadData5 ?? null,
+            payloadData6: hidden?.payloadData6 ?? null,
+            userId: hidden?.userId ?? null,
+            processId: hidden?.processId ?? null,
+            threadId: hidden?.threadId ?? null,
+            keywords: hidden?.keywords ?? null,
+            sourceFile: reader.name,
+            payload: hidden?.payload ?? null,
+            xml: hidden?.xml ?? null,
+            chunkNumber,
+            recordSize: hiddenSize,
+            dataLength: hiddenSize - 28,
+            extraDataOffset: null,
+            offset: offset + hiddenAt,
+          };
+        }
 
         pos += size;
       }

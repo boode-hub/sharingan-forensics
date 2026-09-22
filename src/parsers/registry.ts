@@ -13,6 +13,7 @@
  */
 import type { Column, Parser, Reader, Ctx, Row } from '../core/types';
 import { Cursor, filetime, magic } from '../core/binary';
+import { MAX_ROWS } from '../core/registry';
 
 const columns: Column[] = [
   { key: 'keyPath', label: 'Key Path', type: 'str' },
@@ -57,11 +58,8 @@ function hiveTypeFromName(embedded: string): string {
   return HIVE_TYPES[base] ?? 'Other';
 }
 
-// A real SOFTWARE hive exceeded 500,000 rows and was silently truncated, which
-// is exactly the "data left behind" a forensic tool must not do. This is a
-// runaway guard against a malformed hive, not a display limit, so it sits well
-// above any legitimate hive; src/core/registry.ts enforces the hard ceiling.
-const MAX_ROWS = 5_000_000;
+// The shared ceiling from src/core/registry.ts. Checked here as well as there
+// so the walk stops descending rather than building rows the caller discards.
 
 // 2-char cell signatures as little-endian int16 (Helpers.cs constants).
 const NK = 0x6b6e; // "nk"

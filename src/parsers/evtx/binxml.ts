@@ -906,6 +906,12 @@ export interface DecodedRecord {
   eventRecordId: string | null;
   /** The time in the XML, which is the one EvtxECmd puts in its TimeCreated column. */
   timeCreated: Date | null;
+  /**
+   * Where the BinXML stream ended inside the record payload. Anything after it
+   * is slack, and a second record hidden there is how DanderSpritz conceals an
+   * event from every tool that stops at the first one.
+   */
+  binXmlEnd: number;
   /** Plain-language summary of the event, from his event map. */
   mapDescription: string | null;
   userName: string | null;
@@ -1239,6 +1245,7 @@ export function decodeRecordBinXml(
     payloadData5: mapped.PayloadData5 ?? null,
     payloadData6: mapped.PayloadData6 ?? null,
     payload: extractPayloadXml(fullXml),
+    binXmlEnd: cursor.pos,
     xml: fullXml,
   };
 }

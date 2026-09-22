@@ -30,7 +30,19 @@ export async function detect(reader: Reader): Promise<Parser | null> {
   return parsers.find((p) => p.extensions.includes(ext)) ?? null;
 }
 
-const MAX_ROWS = 2_000_000;
+/**
+ * The one ceiling on how many rows a single artifact may produce.
+ *
+ * It exists to stop a malformed file looping forever, not to limit what an
+ * analyst may see: a real SOFTWARE hive has been measured well past a million
+ * rows, so anything lower silently truncates genuine evidence. Whenever it is
+ * hit the outcome says so, and the grid repeats it in the footer, because a
+ * partial result presented as a complete one is worse than no result.
+ *
+ * Parsers import this rather than keeping their own number; two ceilings means
+ * the lower one wins silently and the other is a lie in a comment.
+ */
+export const MAX_ROWS = 5_000_000;
 
 /**
  * Runs a parser to completion, collecting rows and warnings.

@@ -163,8 +163,24 @@ export function xpressHuffmanDecompress(input: Uint8Array, outputSize: number): 
  * then the Xpress Huffman stream. Returns the input unchanged when there is no
  * MAM header, so callers can hand any Prefetch file straight through.
  */
+/**
+ * Refuse a declared size no real compressor could have produced from this
+ * input. The length field is 32 bits of attacker-controlled data, so a 12-byte
+ * file can demand a 4 GiB allocation — a decompression bomb. Xpress Huffman
+ * gets nowhere near 1000:1 on real data, and 512 MiB is already far beyond any
+ * genuine Prefetch file.
+ */
+const MAX_RATIO = 1000;
+const MAX_OUTPUT = 512 * 1024 * 1024;
+
 export function unwrapMam(buf: Uint8Array): Uint8Array {
   if (buf.length < 8 || buf[0] !== 0x4d || buf[1] !== 0x41 || buf[2] !== 0x4d) return buf;
   const size = (buf[4] | (buf[5] << 8) | (buf[6] << 16) | (buf[7] << 24)) >>> 0;
-  return xpressHuffmanDecompress(buf.subarray(8), size);
+  const body = buf.subarray(8);
+  if (size > MAX_OUTPUT || size > body.length * MAX_RATIO) {
+    throw new XpressError(
+      `declared size ${size} is implausible for ${body.length} compressed bytes; refusing to allocate`,
+    );
+  }
+  return xpressHuffmanDecompress(body, size);
 }

@@ -11,10 +11,37 @@ export function fmt(v: unknown): string {
 
 const needsQuote = /[",\r\n]/;
 
+/**
+ * Leading characters that make Excel, LibreOffice and Google Sheets treat a
+ * cell as a formula rather than as text.
+ */
+const FORMULA_LEAD = /^[=+\-@\t\r]/;
+
+/**
+ * Neutralises spreadsheet formula injection.
+ *
+ * Evidence is attacker-controlled: malware chooses its own file names,
+ * registry value names and event payloads. A value such as
+ * `=cmd|'/c calc.exe'!A1` executes when the analyst opens the export, and
+ * exporting to CSV then opening it in Excel is routine work, so the value
+ * cannot be handed through untouched.
+ *
+ * The cell is prefixed with an apostrophe and quoted; spreadsheets strip the
+ * apostrophe on display and treat the remainder as literal text. That alters
+ * the exported bytes by one character, so the JSON export is deliberately left
+ * byte-faithful for when exact content matters.
+ */
+export function neutralizeFormula(s: string): string {
+  return FORMULA_LEAD.test(s) ? `'${s}` : s;
+}
+
 export function toCsv(columns: Column[], rows: Row[]): string {
   const cell = (v: unknown) => {
-    const s = fmt(v);
-    return needsQuote.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
+    const raw = fmt(v);
+    const s = neutralizeFormula(raw);
+    return needsQuote.test(s) || FORMULA_LEAD.test(raw)
+      ? `"${s.replaceAll('"', '""')}"`
+      : s;
   };
   const head = columns.map((c) => cell(c.label)).join(',');
   const body = rows.map((r) => columns.map((c) => cell(r[c.key])).join(','));

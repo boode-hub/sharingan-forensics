@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { matches } from './Grid';
+import { toCsv, toJson } from './format';
 
 describe('column filter matching', () => {
   it('matches a substring case-insensitively', () => {
@@ -76,5 +77,29 @@ describe('date filters are interpreted as UTC', () => {
   it('handles a date with no time component', () => {
     expect(matches(d, '>=2019-02-13')).toBe(true);
     expect(matches(d, '>=2019-02-14')).toBe(false);
+  });
+});
+
+describe('CSV export is safe to open in a spreadsheet', () => {
+  const cols = [{ key: 'v', label: 'Value' }];
+
+  it('neutralises every formula lead character', () => {
+    for (const payload of ["=cmd|'/c calc'!A1", '+1+1', '-2+3', '@SUM(1)', '\tx', '\rx']) {
+      const line = toCsv(cols, [{ v: payload }]).split('\r\n')[1];
+      expect(line.startsWith('"\''), `unsafe for ${JSON.stringify(payload)}`).toBe(true);
+    }
+  });
+
+  it('leaves ordinary values untouched', () => {
+    const line = toCsv(cols, [{ v: 'C:/Windows/notepad.exe' }]).split(/\r\n/)[1];
+    expect(line).toBe('C:/Windows/notepad.exe');
+  });
+
+  it('still quotes and escapes embedded quotes and commas', () => {
+    expect(toCsv(cols, [{ v: 'a,b"c' }]).split('\r\n')[1]).toBe('"a,b""c"');
+  });
+
+  it('keeps the JSON export byte-faithful, so exact content is recoverable', () => {
+    expect(JSON.parse(toJson([{ v: "=cmd|'/c calc'!A1" }]))[0].v).toBe("=cmd|'/c calc'!A1");
   });
 });

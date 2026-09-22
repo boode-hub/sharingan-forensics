@@ -7,8 +7,9 @@
  *   Other/HBinRecord.cs (cell walking), Other/Helpers.cs (signatures),
  *   RegistryHive.cs (the walker), Abstractions/RegistryKey.cs (paths).
  *
- * Scope: full key/value enumeration only. Log replay, deleted-key recovery
- * and RECmd plugins are separate follow-up tasks and are not attempted here.
+ * Scope: full key/value enumeration, plus recovery of deleted keys and
+ * unassociated values from unallocated cells. Transaction log replay and RECmd
+ * plugins are separate follow-up tasks and are not attempted here.
  */
 import type { Column, Parser, Reader, Ctx, Row } from '../core/types';
 import { Cursor, filetime, magic } from '../core/binary';
@@ -18,9 +19,43 @@ const columns: Column[] = [
   { key: 'valueName', label: 'Value Name', type: 'str' },
   { key: 'valueType', label: 'Value Type', type: 'str' },
   { key: 'valueData', label: 'Value Data', type: 'str' },
+  { key: 'isDeleted', label: 'Deleted', type: 'bool' },
   { key: 'lastWritten', label: 'Last Written', type: 'date' },
+  { key: 'valueSlack', label: 'Value Slack', type: 'str', secondary: true },
+  { key: 'hiveType', label: 'Hive Type', type: 'str' },
+  { key: 'sourceFile', label: 'Source File', type: 'str' },
   { key: 'offset', label: 'Offset', type: 'num', secondary: true },
 ];
+
+/**
+ * His HiveTypeEnum, keyed by the base name the hive records in its own header.
+ * The name a hive is saved under tells you nothing; the embedded one does.
+ */
+const HIVE_TYPES: Record<string, string> = {
+  'ntuser.dat': 'NtUser',
+  sam: 'Sam',
+  security: 'Security',
+  software: 'Software',
+  system: 'System',
+  drivers: 'Drivers',
+  'usrclass.dat': 'UsrClass',
+  components: 'Components',
+  bcd: 'Bcd',
+  'amcache.hve': 'Amcache',
+  'amcache.hve.tmp': 'Amcache',
+  'syscache.hve': 'Syscache',
+  elam: 'Elam',
+  default: 'Default',
+  vsmidk: 'Vsmidk',
+  bcdtemplate: 'BcdTemplate',
+  bbi: 'Bbi',
+  userdiff: 'Userdiff',
+};
+
+function hiveTypeFromName(embedded: string): string {
+  const base = embedded.split('\\').pop()?.toLowerCase() ?? '';
+  return HIVE_TYPES[base] ?? 'Other';
+}
 
 // A real SOFTWARE hive exceeded 500,000 rows and was silently truncated, which
 // is exactly the "data left behind" a forensic tool must not do. This is a
@@ -122,8 +157,8 @@ function isFree(buf: Uint8Array): boolean {
 /**
  * Walk every hbin and collect the allocated nk/vk cells and list records,
  * keyed by their relative (post-4096-header) offset — mirrors EZ's
- * CellRecords / ListRecords dictionaries. Only allocated records are kept;
- * deleted-key recovery is a separate task.
+ * CellRecords / ListRecords dictionaries. Free cells are kept too: a cell the
+ * live tree never reaches is what deleted-key recovery works from.
  */
 async function collectCells(
   reader: Reader,
@@ -352,7 +387,10 @@ export const registry: Parser = {
     const rootRel = hc.u32();
     const hbinLength = hc.u32();
     hc.skip(32); // clustering factor + reserved
-    hc.utf16(64); // embedded hive name (e.g. \SystemRoot\System32\Config\SAM)
+    // The hive records its own path; the base name of it is what identifies
+    // the hive, whatever the file has since been renamed to.
+    const embeddedName = hc.utf16(64);
+    const hiveType = hiveTypeFromName(embeddedName);
 
     if (primarySeq !== secondarySeq) {
       ctx.warn(
@@ -377,8 +415,16 @@ export const registry: Parser = {
     }
 
     const visited = new Set<number>();
+    // Every vk the live tree reaches. What is left over is either a value of a
+    // deleted key or an orphan, and either way it is evidence of something
+    // that used to be there.
+    const referencedValues = new Set<number>();
+    // Path of every live key by its cell offset, so a deleted key whose parent
+    // survived can be reported under the parent's real path.
+    const livePaths = new Map<number, string>();
     let rows = 0;
     const capped = { hit: false };
+    const common = { hiveType, sourceFile: reader.name };
 
     async function* emitKey(cell: CellRec, parentPath: string): AsyncGenerator<Row> {
       if (ctx.signal?.aborted) return;
@@ -424,6 +470,8 @@ export const registry: Parser = {
       }
       const keyPath = parentPath === '' ? keyName : `${parentPath}\\${keyName}`;
 
+      livePaths.set(cell.rel, keyPath);
+
       const rowOffset = cell.rel + 4096;
 
       // Values: read the value-list data cell for the count, resolve each vk.
@@ -439,6 +487,7 @@ export const registry: Parser = {
               ctx.warn(vkRel, `expected value cell missing at 0x${vkRel.toString(16)}`);
               continue;
             }
+            referencedValues.add(vkRel);
             const val = await decodeValue(reader, vk, minor);
             if (val) values.push(val);
           }
@@ -456,10 +505,13 @@ export const registry: Parser = {
         }
         rows++;
         yield {
+          ...common,
           keyPath,
           valueName: null,
           valueType: null,
           valueData: null,
+          valueSlack: null,
+          isDeleted: false,
           lastWritten: lastWrite,
           offset: rowOffset,
         };
@@ -473,7 +525,7 @@ export const registry: Parser = {
             return;
           }
           rows++;
-          yield { keyPath, lastWritten: lastWrite, offset: rowOffset, ...v };
+          yield { ...common, keyPath, isDeleted: false, lastWritten: lastWrite, offset: rowOffset, ...v };
         }
       }
 
@@ -535,6 +587,182 @@ export const registry: Parser = {
     yield* emitKey(rootCell, '');
 
     if (capped.hit) return;
+
+    // Deleted key and value recovery, following BuildDeletedRegistryKeys in
+    // his RegistryHive. A cell the live tree never reached is either a key
+    // that was deleted or a value belonging to one; the bytes stay until the
+    // slot is reused, which is why a deleted Run key can still be read weeks
+    // later.
+    interface Deleted {
+      rel: number;
+      name: string;
+      parentRel: number;
+      lastWrite: Date | null;
+      valueRels: number[];
+      path: string;
+    }
+
+    const deleted = new Map<number, Deleted>();
+
+    for (const [rel, cell] of cells) {
+      if (ctx.signal?.aborted) return;
+      if (cell.sig !== 'nk' || visited.has(rel)) continue;
+
+      const buf = cell.buf;
+      if (buf.length < 0x50) continue;
+
+      const c = new Cursor(buf, 6);
+      const flags = c.u16();
+      const lastWrite = c.filetime();
+      c.skip(4);
+      const parentRel = c.u32();
+      c.u32(); // subkey count
+      c.u32();
+      c.u32(); // subkey list
+      c.u32();
+      const valueListCount = c.u32();
+      const valueListRel = c.u32();
+      c.skip(4 + 4 + 4 + 4 + 8 + 4);
+      const nameLen = c.u16();
+
+      // His sanity check: a record that cannot hold its own name is not one.
+      if (buf.length < 0x50 + nameLen) continue;
+      // And a value count this large is a reused cell, not a key.
+      if (valueListCount > 10000) continue;
+
+      const name =
+        (flags & NK_FLAG_COMPRESSED_NAME) !== 0
+          ? asciiBytes(buf.subarray(0x50, 0x50 + nameLen))
+          : utf16Text(buf.subarray(0x50, 0x50 + nameLen * 2));
+      if (name.length === 0) continue;
+
+      const valueRels: number[] = [];
+      if (valueListRel > 0 && valueListRel !== 0xffffffff) {
+        const list = await readDataCell(reader, valueListRel);
+        if (list) {
+          for (let i = 0; i < valueListCount && i * 4 + 4 <= list.length; i++) {
+            valueRels.push(new DataView(list.buffer, list.byteOffset + i * 4, 4).getUint32(0, true));
+          }
+          // He also reads past the declared count: a deleted key's list can
+          // still hold offsets from when it had more values.
+          for (let i = valueListCount; i * 4 + 4 <= list.length; i++) {
+            const os = new DataView(list.buffer, list.byteOffset + i * 4, 4).getUint32(0, true);
+            if (os < 8 || os % 8 !== 0) break;
+            if (!valueRels.includes(os)) valueRels.push(os);
+          }
+        }
+      }
+
+      deleted.set(rel, { rel, name, parentRel, lastWrite, valueRels, path: name });
+    }
+
+    // Link deleted keys to deleted parents, then to live parents, so a
+    // recovered key is reported where it actually lived rather than by name
+    // alone.
+    for (const d of deleted.values()) {
+      const segments = [d.name];
+      let parent = d.parentRel;
+      const seen = new Set<number>([d.rel]);
+      while (parent !== undefined && !seen.has(parent)) {
+        seen.add(parent);
+        const dp = deleted.get(parent);
+        if (dp) {
+          segments.unshift(dp.name);
+          parent = dp.parentRel;
+          continue;
+        }
+        const live = livePaths.get(parent);
+        if (live !== undefined) {
+          segments.unshift(live);
+        }
+        break;
+      }
+      d.path = segments.join('\\');
+    }
+
+    const associated = new Set<number>();
+    let recoveredKeys = 0;
+
+    for (const d of deleted.values()) {
+      if (ctx.signal?.aborted) return;
+      if (rows >= MAX_ROWS) {
+        if (!capped.hit) {
+          capped.hit = true;
+          ctx.warn(0, `row cap of ${MAX_ROWS.toLocaleString()} reached — results are partial`);
+        }
+        return;
+      }
+      recoveredKeys++;
+
+      const emitted: Row[] = [];
+      for (const vkRel of d.valueRels) {
+        const vk = cells.get(vkRel);
+        if (!vk || vk.sig !== 'vk') continue;
+        // A vk that is in use and already claimed by a live key is not this
+        // key's value; claiming it would attribute live data to a deleted key.
+        if (!isFree(vk.buf) && referencedValues.has(vkRel)) continue;
+        associated.add(vkRel);
+        const val = await decodeValue(reader, vk, minor, true);
+        if (val) emitted.push(val);
+      }
+
+      if (emitted.length === 0) {
+        rows++;
+        yield {
+          ...common,
+          keyPath: d.path,
+          valueName: null,
+          valueType: null,
+          valueData: null,
+          valueSlack: null,
+          isDeleted: true,
+          lastWritten: d.lastWrite,
+          offset: d.rel + 4096,
+        };
+      } else {
+        for (const v of emitted) {
+          rows++;
+          yield {
+            ...common,
+            keyPath: d.path,
+            isDeleted: true,
+            lastWritten: d.lastWrite,
+            offset: d.rel + 4096,
+            ...v,
+          };
+        }
+      }
+    }
+
+    // Values whose key is gone entirely. He reports these as unassociated;
+    // they have no path, but the name, type and data are still readable.
+    let orphanValues = 0;
+    for (const [rel, cell] of cells) {
+      if (ctx.signal?.aborted) return;
+      if (cell.sig !== 'vk') continue;
+      if (referencedValues.has(rel) || associated.has(rel)) continue;
+      if (rows >= MAX_ROWS) break;
+
+      const val = await decodeValue(reader, cell, minor, true);
+      if (!val) continue;
+      orphanValues++;
+      rows++;
+      yield {
+        ...common,
+        keyPath: '(unassociated)',
+        isDeleted: true,
+        lastWritten: null,
+        offset: rel + 4096,
+        ...val,
+      };
+    }
+
+    if (recoveredKeys > 0 || orphanValues > 0) {
+      ctx.warn(
+        0,
+        `recovered ${recoveredKeys.toLocaleString()} deleted key(s) and ${orphanValues.toLocaleString()} unassociated value(s) from unallocated cells; these are marked Deleted`,
+      );
+    }
   },
 };
 
@@ -551,7 +779,7 @@ function asciiBytes(buf: Uint8Array): string {
  * Decode a vk cell into a value row. Handles resident data, non-resident data
  * and the big-data (db) case, following VkCellRecord.cs.
  */
-async function decodeValue(reader: Reader, vk: CellRec, minor: number): Promise<Row | null> {
+async function decodeValue(reader: Reader, vk: CellRec, minor: number, allowFree = false): Promise<Row | null> {
   const buf = vk.buf;
   if (buf.length < 0x18) {
     // not a recoverable vk record
@@ -587,8 +815,7 @@ async function decodeValue(reader: Reader, vk: CellRec, minor: number): Promise<
     dataBlock = buf.subarray(start, end);
     internalOffset = 0;
   } else {
-    if (isFree(buf)) {
-      // Deleted/non-resident values are out of scope for this task.
+    if (isFree(buf) && !allowFree) {
       return null;
     }
     const cell = await readCellRaw(reader, offsetToData);
@@ -630,9 +857,17 @@ async function decodeValue(reader: Reader, vk: CellRec, minor: number): Promise<
 
   const valueData = renderValueData(dataBlock, dataLen, dataTypeRaw, internalOffset);
 
+  // Whatever is left in the record after the value itself. It is the previous
+  // occupant of those bytes, so it can hold data from a value that was
+  // overwritten by a shorter one.
+  const slackStart = internalOffset + dataLen;
+  const valueSlack =
+    slackStart < dataBlock.length ? hexBytes(dataBlock.subarray(slackStart)) : null;
+
   return {
     valueName,
     valueType: regTypeName(dataTypeRaw),
     valueData,
+    valueSlack,
   };
 }

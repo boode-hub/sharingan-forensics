@@ -163,12 +163,24 @@ function mftReference(b: Uint8Array): { entry: number | null; sequence: number |
   };
 }
 
-/** NUL-separated UTF-16 strings, as the filename-strings block stores them. */
-function splitStrings(buf: Uint8Array, offset: number, size: number): string[] {
+/**
+ * NUL-separated UTF-16 strings, as the filename-strings block stores them,
+ * each with where it starts so a row can point at its own bytes rather than at
+ * the block every file shares.
+ */
+function splitStrings(
+  buf: Uint8Array,
+  offset: number,
+  size: number,
+): Array<{ value: string; at: number }> {
   if (size <= 0 || offset < 0 || offset + size > buf.length) return [];
-  return utf16Raw(buf.subarray(offset, offset + size))
-    .split('\0')
-    .filter((s) => s.length > 0);
+  const out: Array<{ value: string; at: number }> = [];
+  let at = offset;
+  for (const part of utf16Raw(buf.subarray(offset, offset + size)).split('\0')) {
+    if (part.length > 0) out.push({ value: part, at });
+    at += part.length * 2 + 2; // the string plus its terminator
+  }
+  return out;
 }
 
 export const prefetch: Parser = {
@@ -393,14 +405,14 @@ export const prefetch: Parser = {
           yield {
             ...context,
             entryType: 'File',
-            path: filenames[i],
+            path: filenames[i].value,
             runTime: null,
             mftEntry: ref.entry,
             mftSequence: ref.sequence,
             volumeDevice: null,
             volumeSerial: null,
             volumeCreated: null,
-            offset: filenamesOffset,
+            offset: filenames[i].at,
           };
         }
       }
@@ -414,14 +426,14 @@ export const prefetch: Parser = {
         yield {
           ...context,
           entryType: 'File',
-          path: filenames[i],
+          path: filenames[i].value,
           runTime: null,
           mftEntry: references[i]?.entry ?? null,
           mftSequence: references[i]?.sequence ?? null,
           volumeDevice: null,
           volumeSerial: null,
           volumeCreated: null,
-          offset: filenamesOffset,
+          offset: filenames[i].at,
         };
       }
     }

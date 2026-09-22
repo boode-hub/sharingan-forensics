@@ -1,5 +1,5 @@
 {
-  "_comment": "Written from what make.mjs lays down, not from parser output. The generator builds a version 31 file with two run times, one volume, no directories, no file references and two loaded filenames: two Run rows, one Volume row and two File rows. Offsets are where each entry sits in the decompressed body. The hash is formatted as his Header formats it, upper-case hex with no leading zero.",
+  "_comment": "Written from what make.mjs lays down, not from parser output. The generator builds a version 31 file with two run times, one volume, no directories, no file references and two loaded filenames: two Run rows, one Volume row and two File rows. Offsets are where each entry sits in the decompressed body; the second loaded filename starts 82 bytes after the first, which is its 40 characters plus a terminator. The hash is formatted as his Header formats it, upper-case hex with no leading zero.",
   "NOTEPAD.EXE-AAAAAAAA.pf": [
     {
       "entryType": "Run",
@@ -89,7 +89,7 @@
       "size": 612,
       "version": "Windows 11",
       "sourceFile": "NOTEPAD.EXE-AAAAAAAA.pf",
-      "offset": 308
+      "offset": 390
     }
   ],
   "NOTEPAD.EXE-MAMTEST.pf": [
@@ -181,7 +181,7 @@
       "size": 612,
       "version": "Windows 11",
       "sourceFile": "NOTEPAD.EXE-MAMTEST.pf",
-      "offset": 308
+      "offset": 390
     }
   ]
 }

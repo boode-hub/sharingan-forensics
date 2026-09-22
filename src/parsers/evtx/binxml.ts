@@ -10,6 +10,8 @@
 import { Cursor, filetime, guid, utf16, ascii } from '../../core/binary';
 import type { EventMap } from './maps';
 import { findMap } from './maps';
+import type { XNode } from './xpath';
+import { parseXml, selectSingleNode } from './xpath';
 
 // BinXML Token opcodes
 export const TOKEN_EOF = 0x00;
@@ -212,6 +214,12 @@ function parseTemplateBytes(
   templateChunkStart: number,
   cache: ChunkCache,
   depth: number,
+  /**
+   * Whether element starts carry the 2-byte dependency identifier. They do
+   * inside a template definition, and per [MS-EVEN6] they do not inside a
+   * fragment carried by a Binary XML (0x21) substitution.
+   */
+  hasDependencyId = true,
 ): BinXmlNode[] {
   const nodes: BinXmlNode[] = [];
   const cursor = new Cursor(bytes, 0);
@@ -224,7 +232,7 @@ function parseTemplateBytes(
       continue;
     }
     if (op === TOKEN_OPEN_START_ELEMENT || op === TOKEN_OPEN_START_ELEMENT_ATTR) {
-      const elem = parseElement(cursor, op, templateChunkStart, cache, depth);
+      const elem = parseElement(cursor, op, templateChunkStart, cache, depth, hasDependencyId);
       if (elem) nodes.push(elem);
       continue;
     }
@@ -239,10 +247,11 @@ function parseElement(
   chunkBase: number,
   cache: ChunkCache,
   depth: number,
+  hasDependencyId = true,
 ): BinXmlNode | null {
   if (depth > 20) return null;
   const hasAttr = op === TOKEN_OPEN_START_ELEMENT_ATTR;
-  cursor.skip(2); // dependency identifier / substitution slot
+  if (hasDependencyId) cursor.skip(2); // dependency identifier / substitution slot
   const elemSize = cursor.u32();
   const startPos = cursor.pos;
 
@@ -322,7 +331,7 @@ function parseElement(
       break;
     }
     if (childOp === TOKEN_OPEN_START_ELEMENT || childOp === TOKEN_OPEN_START_ELEMENT_ATTR) {
-      const childElem = parseElement(cursor, childOp, chunkBase, cache, depth + 1);
+      const childElem = parseElement(cursor, childOp, chunkBase, cache, depth + 1, hasDependencyId);
       if (childElem) children.push(childElem);
     } else if (childOp === TOKEN_VALUE || childOp === TOKEN_VALUE_MORE) {
       cursor.skip(1); // skip valType byte
@@ -445,17 +454,30 @@ export function formatSubstitutionValue(
       return d.length >= 4 && dv.getInt32(0, true) !== 0 ? 'true' : 'false';
     case 0x0e: // BinaryType
     case 0x10: // SizeTType
+      // Continuous upper-case hex, the way Windows renders <Binary>.
       return Array.from(d)
         .map((b) => b.toString(16).padStart(2, '0').toUpperCase())
-        .join('-');
+        .join('');
     case 0x0f: // GuidType
-      return guid(d);
+      // Windows renders a substituted GUID in braces, and analysts match on
+      // that form when pivoting between tools.
+      return `{${guid(d)}}`;
     case 0x11: {
-      // FileTimeType
+      // FileTimeType. A FILETIME counts 100-nanosecond intervals, and Windows
+      // prints all seven fractional digits. A JavaScript Date only holds
+      // milliseconds, so the last four digits come from the remainder --
+      // without them an event's ordering within the same millisecond is lost,
+      // which is exactly the resolution a timeline needs.
+      // Computed here rather than through filetime(), which reports an
+      // unset timestamp as null: Windows prints a zero FILETIME literally as
+      // 1601-01-01T00:00:00.0000000Z, and an analyst needs to see that the
+      // field was present and zero rather than absent.
       if (d.length < 8) return '';
       const ft = dv.getBigUint64(0, true);
-      const dt = filetime(ft);
-      return dt ? dt.toISOString() : '';
+      const ms = Number((ft - 116_444_736_000_000_000n) / 10_000n);
+      if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return '';
+      const iso = new Date(ms).toISOString();
+      return `${iso.slice(0, -1)}${String(ft % 10_000n).padStart(4, '0')}Z`;
     }
     case 0x12: {
       // SysTimeType
@@ -464,107 +486,33 @@ export function formatSubstitutionValue(
     }
     case 0x13: // SidType
       return formatSid(d);
+    // Windows renders hex integers in lower case, e.g. 0xd6b0. EvtxECmd
+    // upper-cases them; we follow Windows so a value copied out of here
+    // matches what Event Viewer shows.
     case 0x14: // HexInt32Type
-      return d.length >= 4
-        ? `0x${dv.getUint32(0, true).toString(16).toUpperCase()}`
-        : '';
+      return d.length >= 4 ? `0x${dv.getUint32(0, true).toString(16)}` : '';
     case 0x15: // HexInt64Type
-      return d.length >= 8
-        ? `0x${dv.getBigUint64(0, true).toString(16).toUpperCase()}`
-        : '';
+      return d.length >= 8 ? `0x${dv.getBigUint64(0, true).toString(16)}` : '';
     case 0x21: {
       // BinXmlType
       return decodeNestedBinXml(d, chunk, cache, depth + 1, recordChunkOffset);
     }
-    case 0x81: {
-      // ArrayUnicodeString
-      const s = new TextDecoder('utf-16le').decode(d);
-      return s
-        .split('\0')
-        .filter((x) => x.length > 0)
-        .join(', ');
-    }
-    case 0x82: {
-      // ArrayAsciiString
-      const s = new TextDecoder('windows-1252').decode(d);
-      return s
-        .split('\0')
-        .filter((x) => x.length > 0)
-        .join(', ');
-    }
-    case 0x83: {
-      // Array8BitIntSigned
-      const arr: number[] = [];
-      for (let i = 0; i < d.length; i++) arr.push(dv.getInt8(i));
-      return arr.join(',');
-    }
-    case 0x84: {
-      // Array8BitIntUnsigned
-      return Array.from(d).join(',');
-    }
-    case 0x85: {
-      // Array16BitIntSigned
-      const arr: number[] = [];
-      for (let i = 0; i + 2 <= d.length; i += 2) arr.push(dv.getInt16(i, true));
-      return arr.join(',');
-    }
-    case 0x86: {
-      // Array16BitIntUnsigned
-      const arr: number[] = [];
-      for (let i = 0; i + 2 <= d.length; i += 2) arr.push(dv.getUint16(i, true));
-      return arr.join(',');
-    }
-    case 0x87: {
-      // Array32BitIntSigned
-      const arr: number[] = [];
-      for (let i = 0; i + 4 <= d.length; i += 4) arr.push(dv.getInt32(i, true));
-      return arr.join(',');
-    }
-    case 0x88: {
-      // Array32BitIntUnsigned
-      const arr: number[] = [];
-      for (let i = 0; i + 4 <= d.length; i += 4) arr.push(dv.getUint32(i, true));
-      return arr.join(',');
-    }
-    case 0x89: {
-      // Array64BitIntSigned
-      const arr: string[] = [];
-      for (let i = 0; i + 8 <= d.length; i += 8)
-        arr.push(dv.getBigInt64(i, true).toString());
-      return arr.join(',');
-    }
-    case 0x8a: {
-      // Array64BitIntUnsigned
-      const arr: string[] = [];
-      for (let i = 0; i + 8 <= d.length; i += 8)
-        arr.push(dv.getBigUint64(i, true).toString());
-      return arr.join(',');
-    }
-    case 0x8b: {
-      // ArrayFloat32Bit
-      const arr: number[] = [];
-      for (let i = 0; i + 4 <= d.length; i += 4) arr.push(dv.getFloat32(i, true));
-      return arr.join(',');
-    }
-    case 0x8c: {
-      // ArrayFloat64Bit
-      const arr: number[] = [];
-      for (let i = 0; i + 8 <= d.length; i += 8) arr.push(dv.getFloat64(i, true));
-      return arr.join(',');
-    }
-    case 0x8d: {
-      // ArrayBool
-      const arr: boolean[] = [];
-      for (let i = 0; i + 4 <= d.length; i += 4)
-        arr.push(dv.getInt32(i, true) !== 0);
-      return arr.join(',');
-    }
+    case 0x81:
+    case 0x82:
+    case 0x83:
+    case 0x84:
+    case 0x85:
+    case 0x86:
+    case 0x87:
+    case 0x88:
+    case 0x89:
+    case 0x8a:
+    case 0x8b:
+    case 0x8c:
+    case 0x8d:
     case 0x8f: {
-      // ArrayGuid
-      const arr: string[] = [];
-      for (let i = 0; i + 16 <= d.length; i += 16)
-        arr.push(guid(d.subarray(i, i + 16)));
-      return arr.join(',');
+      const items = arrayItems(sub) ?? [];
+      return items.join(sub.type === 0x81 || sub.type === 0x82 ? ', ' : ',');
     }
     case 0x91: {
       // ArrayFileTime
@@ -633,6 +581,73 @@ function escapeXmlAttr(s: string): string {
 }
 
 /**
+ * Splits an array-typed substitution into its items, from the bytes rather
+ * than from a joined string: "Cisco Systems, Inc." is one item, not two.
+ *
+ * Windows repeats the element that holds the substitution once per item, so a
+ * two-item array renders as <Data>a</Data><Data>b</Data>. An empty item is
+ * still an item — it renders as <Data></Data> — so only the empty string left
+ * by the final terminator is dropped. Returns null for non-array types.
+ */
+export function arrayItems(sub: SubstitutionEntry): string[] | null {
+  const d = sub.data;
+  if ((sub.type & 0x80) === 0 || !d) return null;
+  const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
+  const out: string[] = [];
+
+  switch (sub.type) {
+    case 0x81:
+    case 0x82: {
+      const text =
+        sub.type === 0x81
+          ? new TextDecoder('utf-16le').decode(d)
+          : new TextDecoder('windows-1252').decode(d);
+      const parts = text.split(' ');
+      if (parts.length > 0 && parts[parts.length - 1] === '') parts.pop();
+      return parts;
+    }
+    case 0x83:
+      for (let i = 0; i < d.length; i++) out.push(String(dv.getInt8(i)));
+      return out;
+    case 0x84:
+      for (let i = 0; i < d.length; i++) out.push(String(d[i]));
+      return out;
+    case 0x85:
+      for (let i = 0; i + 2 <= d.length; i += 2) out.push(String(dv.getInt16(i, true)));
+      return out;
+    case 0x86:
+      for (let i = 0; i + 2 <= d.length; i += 2) out.push(String(dv.getUint16(i, true)));
+      return out;
+    case 0x87:
+      for (let i = 0; i + 4 <= d.length; i += 4) out.push(String(dv.getInt32(i, true)));
+      return out;
+    case 0x88:
+      for (let i = 0; i + 4 <= d.length; i += 4) out.push(String(dv.getUint32(i, true)));
+      return out;
+    case 0x89:
+      for (let i = 0; i + 8 <= d.length; i += 8) out.push(dv.getBigInt64(i, true).toString());
+      return out;
+    case 0x8a:
+      for (let i = 0; i + 8 <= d.length; i += 8) out.push(dv.getBigUint64(i, true).toString());
+      return out;
+    case 0x8b:
+      for (let i = 0; i + 4 <= d.length; i += 4) out.push(String(dv.getFloat32(i, true)));
+      return out;
+    case 0x8c:
+      for (let i = 0; i + 8 <= d.length; i += 8) out.push(String(dv.getFloat64(i, true)));
+      return out;
+    case 0x8d:
+      for (let i = 0; i + 4 <= d.length; i += 4) out.push(String(dv.getInt32(i, true) !== 0));
+      return out;
+    case 0x8f:
+      for (let i = 0; i + 16 <= d.length; i += 16) out.push(`{${guid(d.subarray(i, i + 16))}}`);
+      return out;
+    default:
+      return null;
+  }
+}
+
+/**
  * Decodes nested BinXML from a byte buffer (used for ValueType.BinXmlType).
  */
 function decodeNestedBinXml(
@@ -646,12 +661,36 @@ function decodeNestedBinXml(
   const cursor = new Cursor(data, 0);
   let out = '';
 
+  // Names inside this fragment can be stored inline, and telling that apart
+  // from a reference into the chunk's string table needs the fragment's own
+  // position in the chunk. Both are views on the same buffer, so we can
+  // recover it.
+  const dataChunkOffset =
+    data.buffer === chunk.buffer ? data.byteOffset - chunk.byteOffset : 0;
+
   while (cursor.remaining > 0 && !cursor.overran) {
     const op = cursor.u8();
     if (op === TOKEN_EOF) break;
     if (op === TOKEN_START_STREAM) {
       cursor.skip(3);
       continue;
+    }
+    if (op === TOKEN_OPEN_START_ELEMENT || op === TOKEN_OPEN_START_ELEMENT_ATTR) {
+      // A plain element fragment rather than a template instance: UserData
+      // payloads take this shape. EvtxECmd renders only template instances
+      // here and drops everything else, which loses the whole <UserData>
+      // element; we decode it, because it carries the evidence the record is
+      // about and it is what Windows itself renders for the same event.
+      const start = cursor.pos - 1;
+      const nodes = parseTemplateBytes(
+        data.subarray(start),
+        dataChunkOffset + start,
+        cache,
+        depth + 1,
+        false,
+      );
+      out += renderTemplateXml(nodes, [], chunk, cache, depth + 1, recordChunkOffset);
+      break;
     }
     if (op === TOKEN_TEMPLATE_INSTANCE) {
       cursor.skip(1); // version
@@ -702,7 +741,7 @@ function decodeNestedBinXml(
 
       const subCount = cursor.u32();
       if (subCount > 10000 || cursor.remaining < subCount * 4) {
-        throw new Error(`implausible substitution count: ${subCount}`);
+        throw new Error(`implausible substitution count ${subCount} in nested BinXML for template 0x${tOff.toString(16)}`);
       }
       const descriptors: { size: number; type: number }[] = [];
       for (let i = 0; i < subCount; i++) {
@@ -743,6 +782,45 @@ export function renderTemplateXml(
 
   for (const node of nodes) {
     if (node.type === 'element') {
+      // An element whose entire content is optional substitutions that all
+      // resolve to NullType is not emitted at all. This is why Windows shows
+      // <EventData><Data>...</Data></EventData> where a naive render adds an
+      // empty <Binary></Binary> after it.
+      if (
+        !node.empty &&
+        node.children.length > 0 &&
+        node.children.every(
+          (c) =>
+            c.type === 'sub' && c.optional && substitutions[c.subId]?.type === 0x00,
+        )
+      ) {
+        continue;
+      }
+
+      // An array-valued substitution repeats its enclosing element, once per
+      // item, which is how Windows renders a multi-string <Data>.
+      const lone =
+        node.children.length === 1 && node.children[0].type === 'sub'
+          ? node.children[0]
+          : null;
+      if (lone && !node.empty) {
+        const sub = substitutions[lone.subId];
+        const items = sub ? arrayItems(sub) : null;
+        if (items) {
+          for (const item of items) {
+            sb += renderTemplateXml(
+              [{ ...node, children: [{ type: 'text', text: item }] }],
+              substitutions,
+              chunk,
+              cache,
+              depth + 1,
+              recordChunkOffset,
+            );
+          }
+          continue;
+        }
+      }
+
       sb += `<${node.name}`;
       const attrStrs: string[] = [];
 
@@ -773,6 +851,7 @@ export function renderTemplateXml(
         sb += renderTemplateXml(node.children, substitutions, chunk, cache, depth + 1, recordChunkOffset);
         sb += `</${node.name}>`;
       }
+
     } else if (node.type === 'text') {
       sb += escapeXmlText(node.text);
     } else if (node.type === 'sub') {
@@ -798,6 +877,10 @@ export function renderTemplateXml(
   return sb;
 }
 
+/**
+ * One decoded event. The field set mirrors EvtxECmd's own output so an analyst
+ * moving between the two sees the same columns with the same meanings.
+ */
 export interface DecodedRecord {
   eventId: number | null;
   level: string | null;
@@ -807,6 +890,23 @@ export interface DecodedRecord {
   userId: string | null;
   processId: number | null;
   threadId: number | null;
+  keywords: string | null;
+  /** The record identifier as the XML carries it, which EvtxECmd reports separately from the header's record number. */
+  eventRecordId: string | null;
+  /** The time in the XML, which is the one EvtxECmd puts in its TimeCreated column. */
+  timeCreated: Date | null;
+  /** Plain-language summary of the event, from his event map. */
+  mapDescription: string | null;
+  userName: string | null;
+  remoteHost: string | null;
+  executableInfo: string | null;
+  /** The analytically important fields his map lifts out of the payload. */
+  payloadData1: string | null;
+  payloadData2: string | null;
+  payloadData3: string | null;
+  payloadData4: string | null;
+  payloadData5: string | null;
+  payloadData6: string | null;
   payload: string | null;
   xml: string | null;
 }
@@ -831,157 +931,101 @@ function parseLevel(lvlNum: number): string {
 }
 
 /**
- * Extracts and formats the EventData / UserData payload as compact JSON of
- * name/value pairs, applying any matching EventMap.
+ * The nine properties an event map is allowed to set, in EvtxECmd's own
+ * casing. His MapEntryValidator rejects a map that names anything else.
  */
-function extractPayload(
-  xml: string,
-  eventId: number | null,
-  channel: string | null,
-  provider: string | null,
-): string | null {
-  // Extract EventData or UserData tag
-  const eventDataMatch = xml.match(/<EventData[^>]*>([\s\S]*?)<\/EventData>/i);
-  const userDataMatch = xml.match(/<UserData[^>]*>([\s\S]*?)<\/UserData>/i);
-
-  const rawSection = eventDataMatch ? eventDataMatch[1] : userDataMatch ? userDataMatch[1] : null;
-
-  const eventDataPairs: Record<string, string> = {};
-  const unnamedData: string[] = [];
-
-  if (rawSection) {
-    // Extract <Data Name="Key">Value</Data> or <Data>Value</Data>
-    const dataRegex = /<Data(?:\s+Name="([^"]*)")?[^>]*>([\s\S]*?)<\/Data>/gi;
-    let match: RegExpExecArray | null;
-    while ((match = dataRegex.exec(rawSection)) !== null) {
-      const name = match[1];
-      const val = match[2].trim();
-      if (name) {
-        eventDataPairs[name] = val;
-      } else {
-        unnamedData.push(val);
-      }
-    }
-
-    // If UserData with arbitrary child tags:
-    if (Object.keys(eventDataPairs).length === 0 && unnamedData.length === 0) {
-      const tagRegex = /<([A-Za-z0-9_]+)[^>]*>([^<]*)<\/\1>/gi;
-      let tm: RegExpExecArray | null;
-      while ((tm = tagRegex.exec(rawSection)) !== null) {
-        eventDataPairs[tm[1]] = tm[2].trim();
-      }
-    }
-  }
-
-  // Look up event map
-  let map: EventMap | undefined;
-  if (eventId !== null) {
-    map = findMap(eventId, channel, provider);
-  }
-
-  const payloadObj: Record<string, string> = {};
-
-  if (map) {
-    if (map.description) {
-      payloadObj['MapDescription'] = map.description;
-    }
-
-    for (const prop of map.properties) {
-      const varValues: Record<string, string> = {};
-      let anyMatched = false;
-
-      for (const valDef of prop.values) {
-        let rawVal: string | undefined;
-        const nameAttr = valDef.path.match(/@Name="([^"]+)"/);
-        if (nameAttr) {
-          rawVal = eventDataPairs[nameAttr[1]];
-        } else {
-          const idxMatch = valDef.path.match(/Data\[(\d+)\]/);
-          if (idxMatch) {
-            const idx = parseInt(idxMatch[1], 10) - 1;
-            rawVal = unnamedData[idx];
-          } else if (valDef.path.endsWith('/Data')) {
-            rawVal = unnamedData[0] || Object.values(eventDataPairs)[0];
-          } else {
-            const tagMatch = valDef.path.match(/\/([A-Za-z0-9_]+)$/);
-            if (tagMatch) {
-              const re = new RegExp(`<${tagMatch[1]}[^>]*>([^<]*)</${tagMatch[1]}>`, 'i');
-              const m = xml.match(re);
-              if (m) rawVal = m[1];
-            }
-          }
-        }
-
-        if (rawVal !== undefined && rawVal !== '') {
-          anyMatched = true;
-          let finalVal = rawVal;
-
-          if (valDef.refine) {
-            try {
-              const re = new RegExp(valDef.refine, 'i');
-              const rm = finalVal.match(re);
-              if (rm) {
-                finalVal = rm[1] !== undefined ? rm[1] : rm[0];
-              }
-            } catch {
-              // ignore regex errors
-            }
-          }
-
-          if (map.lookups) {
-            const lu = map.lookups.find(
-              (l) => l.name.toUpperCase() === valDef.name.toUpperCase(),
-            );
-            if (lu) {
-              if (lu.values[finalVal] !== undefined) {
-                finalVal = lu.values[finalVal];
-              } else if (lu.defaultVal) {
-                finalVal = `${lu.defaultVal} (${finalVal})`;
-              }
-            }
-          }
-
-          varValues[valDef.name] = finalVal;
-          if (!eventDataPairs[valDef.name] && finalVal) {
-            payloadObj[valDef.name] = finalVal;
-          }
-        }
-      }
-
-      if (anyMatched && prop.template) {
-        let resolved = prop.template;
-        for (const [k, v] of Object.entries(varValues)) {
-          resolved = resolved.split(`%${k}%`).join(v);
-        }
-        resolved = resolved.replace(/%[A-Za-z0-9_]+%/g, '').trim();
-        if (resolved) {
-          payloadObj[prop.property] = resolved;
-        }
-      }
-    }
-  }
-
-  // Merge original named data items
-  for (const [k, v] of Object.entries(eventDataPairs)) {
-    if (payloadObj[k] === undefined) {
-      payloadObj[k] = v;
-    }
-  }
-
-  // Include unnamed data items if not mapped
-  for (let i = 0; i < unnamedData.length; i++) {
-    const key = `Data_${i}`;
-    if (payloadObj[key] === undefined) {
-      payloadObj[key] = unnamedData[i];
-    }
-  }
-
-  if (Object.keys(payloadObj).length === 0) {
-    return null;
-  }
-
-  return JSON.stringify(payloadObj);
+export interface MappedProperties {
+  UserName?: string;
+  RemoteHost?: string;
+  ExecutableInfo?: string;
+  PayloadData1?: string;
+  PayloadData2?: string;
+  PayloadData3?: string;
+  PayloadData4?: string;
+  PayloadData5?: string;
+  PayloadData6?: string;
 }
+
+const PROPERTY_NAMES: Record<string, keyof MappedProperties> = {
+  USERNAME: 'UserName',
+  REMOTEHOST: 'RemoteHost',
+  EXECUTABLEINFO: 'ExecutableInfo',
+  PAYLOADDATA1: 'PayloadData1',
+  PAYLOADDATA2: 'PayloadData2',
+  PAYLOADDATA3: 'PayloadData3',
+  PAYLOADDATA4: 'PayloadData4',
+  PAYLOADDATA5: 'PayloadData5',
+  PAYLOADDATA6: 'PayloadData6',
+};
+
+/**
+ * Applies an event map to a record, following EventRecord.BuildProperties.
+ *
+ * Three details there are easy to get wrong and all of them change output:
+ * a path that resolves to nothing still substitutes as an empty string rather
+ * than dropping the property; a Refine regex contributes every match joined
+ * with " | ", not just the first capture group; and a value with no entry in
+ * its lookup table renders as "Default (original)" rather than being left
+ * alone.
+ */
+export function applyMap(
+  root: XNode | null,
+  map: EventMap,
+): MappedProperties {
+  const out: MappedProperties = {};
+
+  for (const entry of map.properties) {
+    if (entry.values.length === 0) continue; // his NOMATCH case
+
+    const vars: Array<[string, string]> = [];
+
+    for (const v of entry.values) {
+      const selected = selectSingleNode(root, v.path);
+      if (selected === null) {
+        vars.push([v.name, '']);
+        continue;
+      }
+
+      let value = selected;
+
+      if (v.refine) {
+        try {
+          const hits = value.match(new RegExp(v.refine, 'gi'));
+          if (hits && hits.length > 0) value = hits.join(' | ');
+        } catch {
+          // A pattern .NET accepts but JavaScript does not leaves the value as-is.
+        }
+      }
+
+      const lookup = map.lookups?.find(
+        (l) => l.name.toUpperCase() === v.name.toUpperCase(),
+      );
+      if (lookup) {
+        value = lookup.values[value] ?? `${lookup.defaultVal} (${value})`;
+      }
+
+      vars.push([v.name, value]);
+    }
+
+    let resolved = entry.template;
+    for (const [name, value] of vars) resolved = resolved.split(`%${name}%`).join(value);
+
+    const target = PROPERTY_NAMES[entry.property.toUpperCase()];
+    if (target) out[target] = resolved;
+  }
+
+  return out;
+}
+
+/**
+ * The record's payload as EvtxECmd reports it: the EventData or UserData
+ * element verbatim, including its own tags.
+ */
+function extractPayloadXml(xml: string): string | null {
+  const m = xml.match(/<(EventData|UserData)(?:\s[^>]*)?(?:\/>|>[\s\S]*?<\/\1>)/i);
+  return m ? m[0] : null;
+}
+
 
 /**
  * Parses BinXML from an event record payload, resolving templates and substitutions
@@ -1066,7 +1110,7 @@ export function decodeRecordBinXml(
 
       const subCount = cursor.u32();
       if (subCount > 10000 || cursor.remaining < subCount * 4) {
-        throw new Error(`implausible substitution count: ${subCount}`);
+        throw new Error(`implausible substitution count ${subCount} for template 0x${templateOffset.toString(16)}`);
       }
 
       const descriptors: { size: number; type: number }[] = [];
@@ -1138,7 +1182,28 @@ export function decodeRecordBinXml(
     if (tidMatch) threadId = parseInt(tidMatch[1], 10);
   }
 
-  const payload = extractPayload(fullXml, eventId, channel, provider);
+  // EvtxECmd parses the record XML once and resolves every map path against
+  // that tree, so we do the same rather than pattern-matching the text.
+  const root = parseXml(fullXml);
+  const map = eventId === null ? undefined : findMap(eventId, channel, provider);
+  const mapped = map ? applyMap(root, map) : {};
+
+  let eventRecordId: string | null = null;
+  const eriMatch = fullXml.match(/<EventRecordID[^>]*>([^<]*)<\/EventRecordID>/i);
+  if (eriMatch) eventRecordId = eriMatch[1];
+
+  // TimeCreated comes from the XML rather than the record header: it is what
+  // EvtxECmd reports, and on a copied or re-written log the two can differ.
+  let timeCreated: Date | null = null;
+  const tcMatch = fullXml.match(/<TimeCreated[^>]*SystemTime="([^"]+)"/i);
+  if (tcMatch) {
+    const t = Date.parse(tcMatch[1].endsWith('Z') ? tcMatch[1] : `${tcMatch[1]}Z`);
+    if (Number.isFinite(t)) timeCreated = new Date(t);
+  }
+
+  // Keywords is a System field EvtxECmd reports; it is how an analyst spots
+  // audit success versus failure without reading the payload.
+  const kwMatch = fullXml.match(/<Keywords>([^<]*)<\/Keywords>/i);
 
   return {
     eventId,
@@ -1149,7 +1214,20 @@ export function decodeRecordBinXml(
     userId,
     processId,
     threadId,
-    payload,
+    keywords: kwMatch ? kwMatch[1] : null,
+    eventRecordId,
+    timeCreated,
+    mapDescription: map?.description ?? null,
+    userName: mapped.UserName ?? null,
+    remoteHost: mapped.RemoteHost ?? null,
+    executableInfo: mapped.ExecutableInfo ?? null,
+    payloadData1: mapped.PayloadData1 ?? null,
+    payloadData2: mapped.PayloadData2 ?? null,
+    payloadData3: mapped.PayloadData3 ?? null,
+    payloadData4: mapped.PayloadData4 ?? null,
+    payloadData5: mapped.PayloadData5 ?? null,
+    payloadData6: mapped.PayloadData6 ?? null,
+    payload: extractPayloadXml(fullXml),
     xml: fullXml,
   };
 }

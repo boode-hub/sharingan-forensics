@@ -202,7 +202,7 @@ describe('evtx parser', () => {
     expect(outcome.warnings.length).toBeGreaterThan(0);
 
     const first = outcome.rows[0];
-    expect(first.recordId).toBe(1);
+    expect(first.recordNumber).toBe(1);
     expect(first.chunkNumber).toBe(0);
     expect(first.offset).toBe(4608);
     expect(first.eventId).toBeNull();
@@ -444,7 +444,7 @@ describe('evtx parser', () => {
       expect(outcome.rows.length).toBe(1);
       const row = outcome.rows[0];
 
-      expect(row.recordId).toBe(1);
+      expect(row.recordNumber).toBe(1);
       expect(row.eventId).toBe(4624);
       expect(row.level).toBe('Information');
       expect(row.provider).toBe('Microsoft-Windows-Security-Auditing');
@@ -454,11 +454,15 @@ describe('evtx parser', () => {
       expect(row.processId).toBe(776);
       expect(row.threadId).toBe(780);
 
-      // Verify payload is valid JSON and contains mapped description and fields
-      expect(typeof row.payload).toBe('string');
-      const payloadObj = JSON.parse(row.payload as string);
-      expect(payloadObj.TargetUserName).toBe('Administrator');
-      expect(payloadObj.MapDescription).toBe('Successful logon');
+      // MapDescription is its own column, as it is in EvtxECmd's output, so an
+      // analyst can filter on it instead of grepping a JSON blob.
+      expect(row.mapDescription).toBe('Successful logon');
+      expect(row.sourceFile).toBe('test-binxml.evtx');
+
+      // Payload is the EventData element verbatim, which is what EvtxECmd puts
+      // in its own Payload column.
+      expect(row.payload).toContain('<Data Name="TargetUserName">Administrator</Data>');
+      expect(row.payload).toMatch(/^<EventData/);
 
       // Verify xml column is populated
       expect(typeof row.xml).toBe('string');
@@ -564,7 +568,7 @@ describe('evtx parser', () => {
       // Chunk 0 yielded warning, Chunk 1 yielded record 2
       expect(outcome.warnings.length).toBeGreaterThan(0);
       expect(outcome.rows.length).toBe(1);
-      expect(outcome.rows[0].recordId).toBe(2);
+      expect(outcome.rows[0].recordNumber).toBe(2);
       expect(outcome.rows[0].chunkNumber).toBe(1);
     });
   });
@@ -734,22 +738,18 @@ describe('evtx parser', () => {
       expect(outcome.rows.length).toBe(2);
 
       const row1 = outcome.rows[0];
-      expect(row1.recordId).toBe(1);
+      expect(row1.recordNumber).toBe(1);
       expect(row1.eventId).toBe(1126);
       expect(row1.provider).toBe('Microsoft-Windows-Windows Defender');
       expect(row1.xml).toContain('<Data Name="Product Name">Microsoft Defender Antivirus</Data>');
-      expect(row1.payload).toBeTruthy();
-      const payload1 = JSON.parse(row1.payload as string);
-      expect(payload1['Product Name']).toBe('Microsoft Defender Antivirus');
+      expect(row1.payload).toContain('<Data Name="Product Name">Microsoft Defender Antivirus</Data>');
 
       const row2 = outcome.rows[1];
-      expect(row2.recordId).toBe(2);
+      expect(row2.recordNumber).toBe(2);
       expect(row2.eventId).toBe(1126);
       expect(row2.provider).toBe('Microsoft-Windows-Windows Defender');
       expect(row2.xml).toContain('<Data Name="Product Name">Microsoft Defender Antivirus Updated</Data>');
-      expect(row2.payload).toBeTruthy();
-      const payload2 = JSON.parse(row2.payload as string);
-      expect(payload2['Product Name']).toBe('Microsoft Defender Antivirus Updated');
+      expect(row2.payload).toContain('<Data Name="Product Name">Microsoft Defender Antivirus Updated</Data>');
     });
   });
 });

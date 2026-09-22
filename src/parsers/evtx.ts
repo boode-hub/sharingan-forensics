@@ -16,18 +16,38 @@ const HEADER_SIZE = 4096;
 const CHUNK_SIZE = 65536;
 const RECORDS_START = 512;
 
+// Column set and order mirror EvtxECmd's own CSV output, so an analyst moving
+// between the two tools reads the same fields in the same places.
+// Column set and order mirror EvtxECmd's own CSV output (see the class map in
+// his Program.cs), so an analyst moving between the two tools reads the same
+// fields in the same places. The last three are ours: they locate a record in
+// the file, which his JSON output also carries.
 const columns: Column[] = [
-  { key: 'recordId', label: 'Record ID', type: 'num' },
-  { key: 'writtenTime', label: 'Written Time', type: 'date' },
-  { key: 'eventId', label: 'Event ID', type: 'num' },
+  { key: 'recordNumber', label: 'Record Number', type: 'num' },
+  { key: 'eventRecordId', label: 'Event Record Id', type: 'str' },
+  { key: 'timeCreated', label: 'Time Created', type: 'date' },
+  { key: 'eventId', label: 'Event Id', type: 'num' },
   { key: 'level', label: 'Level', type: 'str' },
   { key: 'provider', label: 'Provider', type: 'str' },
   { key: 'channel', label: 'Channel', type: 'str' },
+  { key: 'processId', label: 'Process Id', type: 'num' },
+  { key: 'threadId', label: 'Thread Id', type: 'num' },
   { key: 'computer', label: 'Computer', type: 'str' },
-  { key: 'userId', label: 'User ID', type: 'str' },
-  { key: 'processId', label: 'Process ID', type: 'num' },
-  { key: 'threadId', label: 'Thread ID', type: 'num' },
+  { key: 'userId', label: 'User Id', type: 'str' },
+  { key: 'mapDescription', label: 'Map Description', type: 'str' },
+  { key: 'userName', label: 'User Name', type: 'str' },
+  { key: 'remoteHost', label: 'Remote Host', type: 'str' },
+  { key: 'payloadData1', label: 'Payload Data1', type: 'str' },
+  { key: 'payloadData2', label: 'Payload Data2', type: 'str' },
+  { key: 'payloadData3', label: 'Payload Data3', type: 'str' },
+  { key: 'payloadData4', label: 'Payload Data4', type: 'str' },
+  { key: 'payloadData5', label: 'Payload Data5', type: 'str' },
+  { key: 'payloadData6', label: 'Payload Data6', type: 'str' },
+  { key: 'executableInfo', label: 'Executable Info', type: 'str' },
+  { key: 'sourceFile', label: 'Source File', type: 'str' },
+  { key: 'keywords', label: 'Keywords', type: 'str' },
   { key: 'payload', label: 'Payload', type: 'str' },
+  { key: 'writtenTime', label: 'Written Time (header)', type: 'date', secondary: true },
   { key: 'xml', label: 'XML', type: 'str', secondary: true },
   { key: 'chunkNumber', label: 'Chunk', type: 'num' },
   { key: 'offset', label: 'Offset', type: 'num' },
@@ -62,7 +82,13 @@ export const evtx: Parser = {
       const chunk = await reader.bytes(offset, chunkLen);
 
       if (!magic(chunk, 'ElfChnk\0', 0)) {
-        ctx.warn(offset, 'invalid chunk signature, expected ElfChnk\\0; skipping chunk');
+        // An EVTX file is preallocated, so space past the last written chunk
+        // is normally just zeroes. Only say something when it is not: that is
+        // either a partially overwritten chunk or a carving target, and worth
+        // an analyst's attention.
+        if (chunk.subarray(0, 512).some((b) => b !== 0)) {
+          ctx.warn(offset, 'invalid chunk signature, expected ElfChnk\\0; skipping chunk');
+        }
         offset += chunkLen;
         chunkNumber++;
         continue;
@@ -130,16 +156,32 @@ export const evtx: Parser = {
         }
 
         yield {
-          recordId: Number(id),
+          // EvtxECmd's RecordNumber is this identifier from the record header,
+          // not a running count of records read.
+          recordNumber: Number(id),
+          eventRecordId: decoded?.eventRecordId ?? null,
+          timeCreated: decoded?.timeCreated ?? written,
           writtenTime: written,
           eventId: decoded?.eventId ?? null,
           level: decoded?.level ?? null,
           provider: decoded?.provider ?? null,
           channel: decoded?.channel ?? null,
           computer: decoded?.computer ?? null,
+          mapDescription: decoded?.mapDescription ?? null,
+          userName: decoded?.userName ?? null,
+          remoteHost: decoded?.remoteHost ?? null,
+          executableInfo: decoded?.executableInfo ?? null,
+          payloadData1: decoded?.payloadData1 ?? null,
+          payloadData2: decoded?.payloadData2 ?? null,
+          payloadData3: decoded?.payloadData3 ?? null,
+          payloadData4: decoded?.payloadData4 ?? null,
+          payloadData5: decoded?.payloadData5 ?? null,
+          payloadData6: decoded?.payloadData6 ?? null,
           userId: decoded?.userId ?? null,
           processId: decoded?.processId ?? null,
           threadId: decoded?.threadId ?? null,
+          keywords: decoded?.keywords ?? null,
+          sourceFile: reader.name,
           payload: decoded?.payload ?? null,
           xml: decoded?.xml ?? null,
           chunkNumber,

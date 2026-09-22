@@ -18,7 +18,7 @@
  */
 import type { Column, Parser, Reader, Ctx, Row } from '../core/types';
 import { Cursor, guid } from '../core/binary';
-import { absolutePath, parseShellItem, type ShellItem } from './lnk/shellitems';
+import { absolutePath, parseShellItem, type ShellItem } from '../core/shellitem';
 
 const LinkCLSID = '00021401-0000-0000-c000-000000000046';
 const HEADER_SIZE = 76;

@@ -27,7 +27,7 @@ import {
   readRawValue,
   type CellRec,
 } from './registry';
-import { parseShellItem, type ShellItem } from './lnk/shellitems';
+import { parseShellItem, type ShellItem } from '../core/shellitem';
 
 const columns: Column[] = [
   { key: 'absolutePath', label: 'Absolute Path', type: 'str' },

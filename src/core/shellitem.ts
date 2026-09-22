@@ -13,7 +13,7 @@
  * https://github.com/EricZimmerman/Lnk
  * https://github.com/EricZimmerman/ExtensionBlocks
  */
-import { guid, utf16Raw } from '../../core/binary';
+import { guid, utf16Raw } from './binary';
 
 export interface ShellItem {
   /** His FriendlyName: what kind of thing this entry names. */

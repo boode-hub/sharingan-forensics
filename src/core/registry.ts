@@ -55,6 +55,7 @@ export async function run(
   parser: Parser,
   reader: Reader,
   signal?: AbortSignal,
+  siblings?: Reader[],
 ): Promise<ParseOutcome> {
   const rows: Row[] = [];
   const warnings: Warning[] = [];
@@ -66,6 +67,7 @@ export async function run(
         warnings.push({ offset, message: 'further warnings suppressed' });
     },
     signal,
+    siblings,
   };
 
   try {

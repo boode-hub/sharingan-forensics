@@ -14,6 +14,8 @@
 import type { Column, Parser, Reader, Ctx, Row } from '../core/types';
 import { Cursor, filetime, magic } from '../core/binary';
 import { MAX_ROWS } from '../core/registry';
+import { bufReader } from '../core/reader';
+import { replay } from './registry/translog';
 
 const columns: Column[] = [
   { key: 'keyPath', label: 'Key Path', type: 'str' },
@@ -363,7 +365,56 @@ export const registry: Parser = {
   sniff(head: Uint8Array): boolean {
     return magic(head, 'regf', 0);
   },
-  async *parse(reader: Reader, ctx: Ctx): AsyncGenerator<Row> {
+  async *parse(source: Reader, ctx: Ctx): AsyncGenerator<Row> {
+    let reader = source;
+
+    // A hive whose two sequence numbers disagree has changes sitting in its
+    // transaction logs. If the logs were opened with it, replay them first, so
+    // what follows is the hive as the machine would have seen it rather than
+    // as it was last flushed.
+    if (ctx.siblings && ctx.siblings.length > 0 && reader.size >= 4096) {
+      const head = await reader.bytes(0, 12);
+      if (head.length >= 12 && magic(head, 'regf', 0)) {
+        const hv = new DataView(head.buffer, head.byteOffset, head.byteLength);
+        const primary = hv.getUint32(4, true);
+        const secondary = hv.getUint32(8, true);
+        if (primary !== secondary) {
+          const logs: Array<{ name: string; bytes: Uint8Array }> = [];
+          for (const sib of ctx.siblings) {
+            const bytes = await sib.bytes(0, sib.size);
+            if (bytes.length > 0x200 && magic(bytes, 'regf', 0)) {
+              logs.push({ name: sib.name, bytes });
+            } else {
+              ctx.warn(0, `${sib.name} is not a registry transaction log; ignoring it`);
+            }
+          }
+
+          if (logs.length > 0) {
+            const hive = await reader.bytes(0, reader.size);
+            const result = replay(hive, logs, secondary);
+            if (result.entriesApplied > 0) {
+              reader = bufReader(result.bytes, reader.name);
+              ctx.warn(
+                0,
+                `replayed ${result.entriesApplied} log entr${result.entriesApplied === 1 ? 'y' : 'ies'} (${result.pagesApplied} pages) from ${result.logsUsed.join(', ')}; the rows below are the hive brought up to date, not as it was captured`,
+              );
+            } else {
+              ctx.warn(
+                0,
+                `the logs held nothing newer than the hive itself, so nothing was replayed${result.entriesRejected > 0 ? `; ${result.entriesRejected} entr${result.entriesRejected === 1 ? 'y' : 'ies'} failed hash verification and were skipped` : ''}`,
+              );
+            }
+            if (result.entriesRejected > 0 && result.entriesApplied > 0) {
+              ctx.warn(
+                0,
+                `${result.entriesRejected} log entr${result.entriesRejected === 1 ? 'y was' : 'ies were'} incomplete and skipped rather than applied`,
+              );
+            }
+          }
+        }
+      }
+    }
+
     if (reader.size < 4096) {
       ctx.warn(0, `hive too small to contain a header (${reader.size} bytes)`);
       return;
@@ -393,7 +444,7 @@ export const registry: Parser = {
     if (primarySeq !== secondarySeq) {
       ctx.warn(
         4,
-        `hive is dirty (sequence numbers ${primarySeq} and ${secondarySeq} differ) — may be stale; no log replay yet`,
+        `hive is dirty (sequence numbers ${primarySeq} and ${secondarySeq} differ): changes are sitting in its .LOG1 and .LOG2 files. Open those alongside it and they will be replayed, otherwise these rows are the hive as it was last flushed`,
       );
     }
 

@@ -34,7 +34,15 @@ export default function App() {
   }, []);
 
   const ingest = useCallback((files: FileList | File[]) => {
-    for (const file of files) {
+    const all = [...files];
+    for (const file of all) {
+      // A registry transaction log is not an artifact in its own right; it is
+      // part of the hive beside it. Opening one on its own says nothing, so it
+      // is handed to that hive instead of being parsed separately.
+      if (/\.log[12]?$/i.test(file.name)) {
+        const hive = file.name.replace(/\.log[12]?$/i, '');
+        if (all.some((f) => f.name.toLowerCase() === hive.toLowerCase())) continue;
+      }
       setBusy((n) => n + 1);
       // Everything in the file is parsed regardless of size — nothing is
       // truncated. But past this point it takes long enough that silence looks
@@ -42,7 +50,14 @@ export default function App() {
       if (file.size >= 64 * 1024 * 1024) {
         setBigFiles((b) => [...b, `${file.name} (${bytes(file.size)})`]);
       }
-      worker.current?.postMessage({ id: nextId++, file } satisfies WorkRequest);
+      const siblings = all.filter(
+        (f) => f !== file && f.name.toLowerCase().startsWith(`${file.name.toLowerCase()}.log`),
+      );
+      worker.current?.postMessage({
+        id: nextId++,
+        file,
+        siblings: siblings.length > 0 ? siblings : undefined,
+      } satisfies WorkRequest);
     }
   }, []);
 

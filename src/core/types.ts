@@ -16,6 +16,13 @@ export interface Warning {
 
 export interface Ctx {
   /**
+   * Other files opened alongside this one, when the artifact is only half the
+   * story on its own. A registry hive needs its transaction logs to be read as
+   * the machine would have read it; without them the answer is whatever was
+   * true when the hive was last flushed.
+   */
+  siblings?: Reader[];
+  /**
    * Record a recoverable problem and keep going. Parsers must NOT throw on
    * malformed data: emit the rows they could recover and name what they could
    * not. A corrupt chunk loses that chunk, not the whole file.

@@ -9,6 +9,12 @@ export interface WorkRequest {
   file: File;
   /** Force a parser instead of sniffing. */
   parserId?: string;
+  /**
+   * Files opened in the same batch that belong with this one, such as a hive's
+   * transaction logs. The UI pairs them; the parser decides what to do with
+   * them.
+   */
+  siblings?: File[];
 }
 
 /** What the worker can read, announced once so the UI never lists a stale set. */
@@ -48,7 +54,7 @@ self.postMessage({
 } satisfies WorkerReady);
 
 self.onmessage = async (e: MessageEvent<WorkRequest>) => {
-  const { id, file, parserId } = e.data;
+  const { id, file, parserId, siblings } = e.data;
   const started = performance.now();
   const reader = blobReader(file, file.name);
   const base = { id, fileName: file.name, fileSize: file.size };
@@ -62,7 +68,12 @@ self.onmessage = async (e: MessageEvent<WorkRequest>) => {
     return;
   }
 
-  const outcome = await run(parser, reader);
+  const outcome = await run(
+    parser,
+    reader,
+    undefined,
+    siblings?.map((f) => blobReader(f, f.name)),
+  );
   self.postMessage({
     ...base,
     parser: {

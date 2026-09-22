@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matches } from './Grid';
+import { matches } from './query';
 import { toCsv, toJson } from './format';
 
 describe('column filter matching', () => {

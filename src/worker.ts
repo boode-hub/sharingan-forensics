@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import { blobReader } from './core/reader';
-import { byId, detect, run } from './core/registry';
+import { byId, detect, parsers, run } from './core/registry';
 import type { Column } from './core/types';
 import './parsers';
 
@@ -9,6 +9,19 @@ export interface WorkRequest {
   file: File;
   /** Force a parser instead of sniffing. */
   parserId?: string;
+}
+
+/** What the worker can read, announced once so the UI never lists a stale set. */
+export interface ParserInfo {
+  id: string;
+  name: string;
+  ezTool: string;
+  extensions: string[];
+}
+
+export interface WorkerReady {
+  ready: true;
+  parsers: ParserInfo[];
 }
 
 export interface WorkResult {
@@ -21,6 +34,18 @@ export interface WorkResult {
   ms?: number;
   error?: string;
 }
+
+// Announced on startup rather than hard-coded in the UI: a parser added here
+// should show up in the interface without anyone remembering to update it.
+self.postMessage({
+  ready: true,
+  parsers: parsers.map((p) => ({
+    id: p.id,
+    name: p.name,
+    ezTool: p.ezTool,
+    extensions: p.extensions,
+  })),
+} satisfies WorkerReady);
 
 self.onmessage = async (e: MessageEvent<WorkRequest>) => {
   const { id, file, parserId } = e.data;

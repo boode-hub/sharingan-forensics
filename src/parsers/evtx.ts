@@ -10,14 +10,12 @@
  */
 import type { Column, Parser, Reader, Ctx, Row } from '../core/types';
 import { Cursor, magic } from '../core/binary';
-import { ChunkCache, decodeRecordBinXml, type DecodedRecord } from './evtx/binxml';
+import { ChunkCache, decodeRecordBinXml, loadEventMaps, type DecodedRecord } from './evtx/binxml';
 
 const HEADER_SIZE = 4096;
 const CHUNK_SIZE = 65536;
 const RECORDS_START = 512;
 
-// Column set and order mirror EvtxECmd's own CSV output, so an analyst moving
-// between the two tools reads the same fields in the same places.
 // Column set and order mirror EvtxECmd's own CSV output (see the class map in
 // his Program.cs), so an analyst moving between the two tools reads the same
 // fields in the same places. The last three are ours: they locate a record in
@@ -68,6 +66,10 @@ export const evtx: Parser = {
       ctx.warn(0, 'invalid EVTX signature, expected ElfFile\\0');
       return;
     }
+
+    // Pull in the event maps before any record is decoded; they are loaded on
+    // demand so that opening a prefetch file does not download them.
+    await loadEventMaps();
 
     const headerCount = new Cursor(head, 0).seek(42).u16();
 

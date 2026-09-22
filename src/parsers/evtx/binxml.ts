@@ -9,7 +9,18 @@
  */
 import { Cursor, filetime, guid, utf16, ascii } from '../../core/binary';
 import type { EventMap } from './maps';
-import { findMap } from './maps';
+
+/**
+ * The 468 event maps are three quarters of a megabyte of generated data, and
+ * only event logs need them, so they are loaded on demand rather than bundled
+ * into every parse. loadEventMaps() must be awaited before decoding a record;
+ * without it a record still decodes, just with no map applied.
+ */
+let maps: typeof import('./maps') | null = null;
+
+export async function loadEventMaps(): Promise<void> {
+  maps ??= await import('./maps');
+}
 import type { XNode } from './xpath';
 import { parseXml, selectSingleNode } from './xpath';
 
@@ -602,7 +613,7 @@ export function arrayItems(sub: SubstitutionEntry): string[] | null {
         sub.type === 0x81
           ? new TextDecoder('utf-16le').decode(d)
           : new TextDecoder('windows-1252').decode(d);
-      const parts = text.split(' ');
+      const parts = text.split('\0');
       if (parts.length > 0 && parts[parts.length - 1] === '') parts.pop();
       return parts;
     }
@@ -1185,7 +1196,7 @@ export function decodeRecordBinXml(
   // EvtxECmd parses the record XML once and resolves every map path against
   // that tree, so we do the same rather than pattern-matching the text.
   const root = parseXml(fullXml);
-  const map = eventId === null ? undefined : findMap(eventId, channel, provider);
+  const map = eventId === null ? undefined : maps?.findMap(eventId, channel, provider);
   const mapped = map ? applyMap(root, map) : {};
 
   let eventRecordId: string | null = null;

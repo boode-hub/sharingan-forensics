@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Row } from './core/types';
 import { Grid } from './ui/Grid';
 import { bytes, download, fmt, toCsv, toJson } from './ui/format';
-import type { WorkRequest, WorkResult } from './worker';
+import type { ParserInfo, WorkRequest, WorkResult, WorkerReady } from './worker';
 
 let nextId = 1;
 
@@ -14,14 +14,20 @@ export default function App() {
   const [busy, setBusy] = useState(0);
   const [bigFiles, setBigFiles] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [known, setKnown] = useState<ParserInfo[]>([]);
   const worker = useRef<Worker>(null);
 
   useEffect(() => {
     const w = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
-    w.onmessage = (e: MessageEvent<WorkResult>) => {
-      setResults((rs) => [...rs, e.data]);
+    w.onmessage = (e: MessageEvent<WorkResult | WorkerReady>) => {
+      if ('ready' in e.data) {
+        setKnown(e.data.parsers);
+        return;
+      }
+      const result = e.data;
+      setResults((rs) => [...rs, result]);
       setBusy((n) => n - 1);
-      setSel((s) => s ?? e.data.id);
+      setSel((s) => s ?? result.id);
     };
     worker.current = w;
     return () => w.terminate();
@@ -121,8 +127,16 @@ export default function App() {
 
           {results.length === 0 && (
             <p className="hint">
-              Drop a <code>$I</code>, <code>.pf</code>, <code>.lnk</code> or <code>.evtx</code> file
-              anywhere on this page.
+              Drop a file anywhere on this page. Recognised by content, so a carved or
+              renamed artifact still works:
+              <span className="kinds">
+                {known.map((p) => (
+                  <span key={p.id}>
+                    {p.name}
+                    {p.extensions.length > 0 && <code>{p.extensions.join(' ')}</code>}
+                  </span>
+                ))}
+              </span>
             </p>
           )}
         </aside>

@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { bufReader } from '../core/reader';
 import { detect, run } from '../core/registry';
 import type { Row } from '../core/types';
-import { amcache, invariantDate, tables } from './amcache';
+import { invariantDate } from '../core/textdate';
+import { amcache, tables } from './amcache';
 import './index';
 
 // Built by fixtures/amcache/make.mjs; every value below is what it wrote.

@@ -8,7 +8,7 @@
     "description": "Generated fixture",
     "iconLocation": "C:\\Windows\\System32\\notepad.exe",
     "localPath": "C:\\Windows\\System32\\notepad.exe",
-    "driveType": "DriveFixed",
+    "driveType": "Fixed storage media (Hard drive)",
     "volumeSerialNumber": "107F8885",
     "machineId": "TESTHOST",
     "targetCreated": "2026-09-18T23:53:04.735Z",

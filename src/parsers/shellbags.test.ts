@@ -62,14 +62,16 @@ describe('reading shell bags from a UsrClass hive', () => {
     expect(named?.value).toBe('Shared Documents Folder (Users Files)');
   });
 
-  it('leaves an entry it cannot name empty rather than inventing text', async () => {
-    // These are property views, whose name lives in a property store we do not
-    // decode. Guessing at the nearest readable bytes would put made-up text
-    // into a path an analyst may act on.
+  it('names property views from their property store or GUID, as his ShellBag0X00 does', async () => {
     const outcome = await bags();
-    const undecoded = outcome.rows.filter((r) => r.shellType === 'Variable: Users property view');
-    expect(undecoded.length).toBeGreaterThan(0);
-    expect(undecoded.every((r) => r.value === '')).toBe(true);
+    const byPath = (p: string) => outcome.rows.find((r) => r.absolutePath === p);
+    // 0x23FEBBEE property views carry a known folder GUID.
+    expect(byPath('Shared Documents Folder (Users Files)\\Downloads')?.shellType).toBe('Variable');
+    expect(byPath('UsersLibraries\\VideosLibrary')?.value).toBe('VideosLibrary');
+    // A full property store: the name is System.ItemNameDisplay (property 10).
+    expect(
+      byPath('ControlPanelHome\\All Control Panel Items\\User Accounts\\Change Your Name')?.shellType,
+    ).toBe('Variable: Users property view');
   });
 });
 

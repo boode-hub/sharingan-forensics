@@ -61,7 +61,7 @@ for a browser).
 |---|---|---|---|
 | PECmd | Prefetch `.pf` (incl. MAM/Xpress-Huffman) | P1 | **done** |
 | LECmd | Shortcuts `.lnk` | P1 | **done** |
-| JLECmd | `*.automaticDestinations-ms`, `*.customDestinations-ms` | P1 | todo |
+| JLECmd | `*.automaticDestinations-ms`, `*.customDestinations-ms` | P1 | **done** |
 | RBCmd | Recycle Bin `$I`, `INFO2` | P1 | **done** |
 | RecentFileCacheParser | `RecentFileCache.bcf` | P1 | todo |
 | Registry Explorer | Registry hives (`regf`) | P2 | **done** — keys, values, resident and big-data, deleted recovery |

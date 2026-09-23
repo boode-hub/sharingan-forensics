@@ -25,7 +25,8 @@ phase plan.
 | Shell bags | Shell Bags Explorer | from UsrClass.dat or NTUSER.DAT via **Read as** |
 | Shimcache | AppCompatCacheParser | from a SYSTEM hive via **Read as**, XP to Windows 11 |
 | Prefetch (`.pf`) | PECmd | versions 17 to 31, every file, directory and MFT reference |
-| Shortcuts (`.lnk`) | LECmd | target ID list, tracker block, every extra data block |
+| Shortcuts (`.lnk`) | LECmd | target ID list (every shell item type his library decodes, property stores included), tracker block and MAC vendor, every extra data block |
+| Jump lists (`.automaticDestinations-ms`, `.customDestinations-ms`) | JLECmd | DestList entries with pins, interaction counts and droids, every embedded shortcut, streams the DestList no longer lists |
 | Recycle Bin (`$I`, `INFO2`) | RBCmd | |
 | Everything else | | see SPEC.md |
 

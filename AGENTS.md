@@ -1,8 +1,9 @@
 # Rules for agents working in this repo
 
-Read [SPEC.md](SPEC.md) before writing any parser. It defines the contract, the
-phases and the test requirements. This file is the short version of what gets a
-change rejected in review.
+Start with [MASTER_PROMPT.md](MASTER_PROMPT.md) for the current state, the
+porting workflow and what comes next. Read [SPEC.md](SPEC.md) before writing
+any parser. It defines the contract, the phases and the test requirements.
+This file is the short version of what gets a change rejected in review.
 
 ## Hard rules
 

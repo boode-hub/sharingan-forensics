@@ -3,14 +3,18 @@ import type { Row } from './core/types';
 import { Detail } from './ui/Detail';
 import { Grid } from './ui/Grid';
 import { Logo } from './ui/Logo';
+import { QueryBuilder } from './ui/QueryBuilder';
 import { SigmaPanel } from './ui/SigmaPanel';
 import { bytes, download, toCsv, toJson } from './ui/format';
 import { queryError } from './ui/query';
 import { compileSigma, SigmaError, type SigmaRule } from './ui/sigma';
 import {
+  DEFAULT_DETAIL_SIZES,
   isColour,
+  isFlag,
   isPosition,
   isSavedList,
+  isSizes,
   read,
   upsert,
   write,
@@ -40,6 +44,9 @@ export default function App() {
     read('detailPosition', 'bottom', isPosition),
   );
   const [accent, setAccent] = useState(() => read('accent', DEFAULT_ACCENT, isColour));
+  const [sizes, setSizes] = useState(() => read('detailSizes', DEFAULT_DETAIL_SIZES, isSizes));
+  const [builderOpen, setBuilderOpen] = useState(() => read('builderOpen', true, isFlag));
+  const workspace = useRef<HTMLDivElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [saved, setSaved] = useState<SavedFilter[]>(() => read('savedFilters', [], isSavedList));
@@ -87,6 +94,63 @@ export default function App() {
   useEffect(() => {
     write('detailPosition', position);
   }, [position]);
+
+  useEffect(() => {
+    write('detailSizes', sizes);
+  }, [sizes]);
+
+  useEffect(() => {
+    write('builderOpen', builderOpen);
+  }, [builderOpen]);
+
+  /** The details' size along the axis they sit on, kept clear of the grid. */
+  const resizeDetail = (size: number) => {
+    const box = workspace.current?.getBoundingClientRect();
+    const room = box ? (position === 'bottom' ? box.height : box.width) - 120 : Infinity;
+    const clamped = Math.round(Math.max(120, Math.min(size, room)));
+    setSizes((s) => (position === 'bottom' ? { ...s, bottom: clamped } : { ...s, side: clamped }));
+  };
+  const detailSize = position === 'bottom' ? sizes.bottom : sizes.side;
+
+  // Dragging the bar between the grid and the details. Pointer capture keeps
+  // the drag going when the pointer leaves the thin bar.
+  const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    const box = workspace.current?.getBoundingClientRect();
+    if (!box || e.button !== 0) return;
+    e.preventDefault();
+    const bar = e.currentTarget;
+    bar.setPointerCapture(e.pointerId);
+    bar.classList.add('dragging');
+    const move = (ev: PointerEvent) =>
+      resizeDetail(
+        position === 'bottom'
+          ? box.bottom - ev.clientY
+          : position === 'right'
+            ? box.right - ev.clientX
+            : ev.clientX - box.left,
+      );
+    const stop = () => {
+      bar.classList.remove('dragging');
+      bar.removeEventListener('pointermove', move);
+      bar.removeEventListener('pointerup', stop);
+      bar.removeEventListener('pointercancel', stop);
+    };
+    bar.addEventListener('pointermove', move);
+    bar.addEventListener('pointerup', stop);
+    bar.addEventListener('pointercancel', stop);
+  };
+
+  const keyResize = (e: React.KeyboardEvent) => {
+    const grow: Record<DetailPosition, [string, string]> = {
+      bottom: ['ArrowUp', 'ArrowDown'],
+      right: ['ArrowLeft', 'ArrowRight'],
+      left: ['ArrowRight', 'ArrowLeft'],
+    };
+    const [more, less] = grow[position];
+    if (e.key !== more && e.key !== less) return;
+    e.preventDefault();
+    resizeDetail(detailSize + (e.key === more ? 24 : -24));
+  };
 
   const ingest = useCallback((files: FileList | File[]) => {
     const all = [...files];
@@ -272,9 +336,11 @@ export default function App() {
         <div className="brand">
           <Logo busy={busy > 0} />
           <div>
-            <h1 className="wordmark" aria-label="4ENSICS">
+            <h1 className="wordmark" aria-label="4NSEC">
               <span className="four">4</span>
-              <span className="rest">ENSICS</span>
+              <span className="rest">
+                N<span className="glitch-s" data-z="Z">S</span>EC
+              </span>
             </h1>
             <p className="tagline">
               Artifact forensics in your browser · every byte is parsed in this tab, nothing is
@@ -447,6 +513,14 @@ export default function App() {
                 >
                   Sigma{sigmaActive ? ' ●' : ''}
                 </button>
+                <button
+                  type="button"
+                  className={builderOpen ? 'on' : ''}
+                  onClick={() => setBuilderOpen((o) => !o)}
+                  title="Build the search a condition at a time"
+                >
+                  Builder
+                </button>
 
                 <select
                   className="saved"
@@ -547,6 +621,10 @@ export default function App() {
                 </button>
               </div>
 
+              {builderOpen && (
+                <QueryBuilder columns={columns} rows={rows} value={search} onChange={setSearch} />
+              )}
+
               {tables.length > 0 && (
                 <div className="tables" role="tablist" aria-label="Tables in this artifact">
                   {tables.map((t) => (
@@ -600,7 +678,7 @@ export default function App() {
                 </details>
               )}
 
-              <div className={`workspace ${position}`}>
+              <div className={`workspace ${position}`} ref={workspace}>
                 <Grid
                   columns={columns}
                   rows={rows}
@@ -618,12 +696,33 @@ export default function App() {
                   onSelect={setRow}
                 />
                 {row && (
-                  <Detail
-                    columns={columns}
-                    row={row}
-                    position={position}
-                    onClose={() => setRow(null)}
-                  />
+                  <>
+                    <div
+                      className={`splitter ${position}`}
+                      role="separator"
+                      aria-orientation={position === 'bottom' ? 'horizontal' : 'vertical'}
+                      aria-label="Resize the row details"
+                      aria-valuenow={detailSize}
+                      tabIndex={0}
+                      title="Drag to resize · double-click to reset"
+                      onPointerDown={startResize}
+                      onKeyDown={keyResize}
+                      onDoubleClick={() =>
+                        setSizes((s) =>
+                          position === 'bottom'
+                            ? { ...s, bottom: DEFAULT_DETAIL_SIZES.bottom }
+                            : { ...s, side: DEFAULT_DETAIL_SIZES.side },
+                        )
+                      }
+                    />
+                    <Detail
+                      columns={columns}
+                      row={row}
+                      position={position}
+                      size={detailSize}
+                      onClose={() => setRow(null)}
+                    />
+                  </>
                 )}
               </div>
             </>

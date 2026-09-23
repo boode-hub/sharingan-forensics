@@ -7,6 +7,7 @@
  * a preference break the page.
  */
 
+// Kept from the earlier name, so settings and saved filters survive the rename.
 const PREFIX = '4ensics.';
 
 export function read<T>(key: string, fallback: T, valid: (v: unknown) => v is T): T {
@@ -33,6 +34,22 @@ export type DetailPosition = 'bottom' | 'left' | 'right';
 
 export const isPosition = (v: unknown): v is DetailPosition =>
   v === 'bottom' || v === 'left' || v === 'right';
+
+/** How much room the row details take: height underneath, width beside. */
+export interface DetailSizes {
+  bottom: number;
+  side: number;
+}
+
+export const DEFAULT_DETAIL_SIZES: DetailSizes = { bottom: 280, side: 440 };
+
+export const isSizes = (v: unknown): v is DetailSizes =>
+  !!v &&
+  typeof v === 'object' &&
+  Number.isFinite((v as DetailSizes).bottom) &&
+  Number.isFinite((v as DetailSizes).side);
+
+export const isFlag = (v: unknown): v is boolean => typeof v === 'boolean';
 
 export const isColour = (v: unknown): v is string =>
   typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);

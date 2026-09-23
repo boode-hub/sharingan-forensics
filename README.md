@@ -1,4 +1,4 @@
-# 4ENSICS
+# 4NSEC
 
 Windows forensic artifact parsing in the browser. Drop in an event log, a
 registry hive, a Prefetch file, a shortcut or a Recycle Bin record and read it

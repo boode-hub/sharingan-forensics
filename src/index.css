@@ -1,5 +1,5 @@
 /* ==========================================================
-   4ENSICS — the Phishing Email Analyzer's HackTheBox theme.
+   4NSEC — the Phishing Email Analyzer's HackTheBox theme.
    The accent can be changed in Settings; everything that is
    green is derived from --accent so it follows the choice.
    ========================================================== */
@@ -184,7 +184,7 @@ textarea {
   fill: var(--accent);
 }
 
-/* The wordmark: a heavy monospace 4ENSICS whose "4" carries the accent, with
+/* The wordmark: a heavy monospace 4NSEC whose "4" carries the accent, with
    the same sideways glitch as the logo when you hover it. */
 .wordmark {
   margin: 0;
@@ -201,6 +201,40 @@ textarea {
 .wordmark .rest {
   color: var(--text);
 }
+/* Every so often the S breaks up and comes back as a Z for a moment. */
+.glitch-s {
+  position: relative;
+  display: inline-block;
+  animation: s-glitch 7s step-end infinite;
+}
+.glitch-s::after {
+  content: attr(data-z);
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+  color: var(--accent);
+  animation: z-glitch 7s step-end infinite;
+}
+/* The Z is drawn inside the S, so the S hides by going transparent rather
+   than by opacity, which would take the Z with it. */
+@keyframes s-glitch {
+  0%, 86%, 100% { color: var(--text); transform: none; text-shadow: none; }
+  87% { color: var(--text); transform: translateX(2px) skewX(-12deg); text-shadow: -3px 0 var(--red), 3px 0 var(--blue); }
+  88% { color: transparent; transform: none; text-shadow: none; }
+  91% { color: var(--text); transform: translateX(-1px); text-shadow: 2px 0 var(--red), -2px 0 var(--blue); }
+  92% { color: transparent; transform: none; text-shadow: none; }
+  95% { color: var(--text); transform: none; text-shadow: none; }
+}
+@keyframes z-glitch {
+  0%, 86%, 100% { opacity: 0; transform: none; text-shadow: none; }
+  88% { opacity: 1; transform: translateX(-2px); text-shadow: 3px 0 var(--red), -3px 0 var(--blue), 0 0 10px var(--accent-glow); }
+  89% { transform: translateX(1px) skewX(10deg); }
+  90% { transform: none; text-shadow: 0 0 10px var(--accent-glow); }
+  91% { opacity: 0; }
+  92% { opacity: 1; transform: translateX(1px); text-shadow: -2px 0 var(--red), 2px 0 var(--blue); }
+  95% { opacity: 0; }
+}
 .brand:hover .wordmark .four {
   animation: glitch 0.45s steps(2, end) 1;
 }
@@ -210,7 +244,9 @@ textarea {
   100% { text-shadow: 0 0 10px var(--accent-glow); transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .brand:hover .wordmark .four {
+  .brand:hover .wordmark .four,
+  .glitch-s,
+  .glitch-s::after {
     animation: none;
   }
 }
@@ -446,6 +482,52 @@ main {
   border-bottom: 1px solid var(--border);
   background: var(--bg-base);
 }
+/* The condition builder: field, comparison, value, then AND / OR / NOT and
+   brackets. It writes into the search box above it. */
+.builder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-base);
+}
+.builder input,
+.builder select {
+  padding: 4px 8px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+}
+.builder-field {
+  width: 170px;
+}
+.builder-value {
+  flex: 0 1 220px;
+  min-width: 120px;
+}
+.builder-sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin: 0 4px;
+}
+.builder-op {
+  min-width: 38px;
+  font: 700 11.5px var(--mono);
+  letter-spacing: 0.04em;
+}
+.builder-op:not(:disabled):hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.builder-open {
+  color: var(--yellow);
+  font-size: 11.5px;
+}
+
 /* One tab per kind of record, as his tools write one CSV per kind. */
 .tables {
   display: flex;
@@ -506,6 +588,7 @@ main {
   font-size: 12px;
 }
 .toolbar button,
+.builder button,
 .sigma-actions button,
 .setting button {
   padding: 5px 11px;
@@ -516,6 +599,7 @@ main {
   transition: border-color var(--transition);
 }
 .toolbar button:hover:not(:disabled),
+.builder button:hover:not(:disabled),
 .sigma-actions button:hover:not(:disabled),
 .setting button:hover {
   border-color: var(--accent);
@@ -930,24 +1014,32 @@ button.primary {
   background: var(--bg-base);
   font-size: 12px;
 }
-.detail.bottom {
-  height: 34%;
-  min-height: 90px;
-  border-top: 1px solid var(--border);
-  resize: vertical;
+.detail {
+  flex: none;
 }
-.detail.left,
-.detail.right {
-  width: 440px;
-  min-width: 260px;
-  max-width: 70%;
-  resize: horizontal;
+
+/* The bar between the grid and the details: drag it, or focus it and use the
+   arrow keys. The size is kept per placement. */
+.splitter {
+  flex: none;
+  background: var(--border);
+  touch-action: none;
+  transition: background var(--transition);
 }
-.detail.right {
-  border-left: 1px solid var(--border);
+.splitter.bottom {
+  height: 5px;
+  cursor: row-resize;
 }
-.detail.left {
-  border-right: 1px solid var(--border);
+.splitter.left,
+.splitter.right {
+  width: 5px;
+  cursor: col-resize;
+}
+.splitter:hover,
+.splitter:focus-visible,
+.splitter.dragging {
+  background: var(--accent);
+  outline: none;
 }
 .detail-head {
   position: sticky;
@@ -986,6 +1078,7 @@ button.primary {
   font-weight: 400;
   padding: 3px 12px;
   white-space: nowrap;
+  max-width: 40%;
   vertical-align: top;
   width: 1%;
 }
@@ -1002,8 +1095,8 @@ button.primary {
   font-family: var(--sans);
   margin-bottom: 4px;
 }
-/* One element per line, always: a long line scrolls sideways rather than
-   wrapping into the next element. Widen the panel by dragging its corner. */
+/* Each element starts a line of its own; a line longer than the panel wraps
+   inside itself rather than running off the side. */
 .detail .structured {
   margin: 0;
   padding: 8px 10px;
@@ -1013,7 +1106,8 @@ button.primary {
   border: 1px solid var(--border);
   border-left: 2px solid var(--accent-border);
   border-radius: var(--radius-sm);
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   font: 11.5px/1.6 var(--mono);
   color: var(--text);
 }

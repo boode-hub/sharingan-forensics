@@ -12,15 +12,22 @@ export function Detail({
   columns,
   row,
   position,
+  size,
   onClose,
 }: {
   columns: Column[];
   row: Row;
   position: DetailPosition;
+  /** Height underneath, width beside, in pixels. */
+  size: number;
   onClose: () => void;
 }) {
   return (
-    <section className={`detail ${position}`} aria-label="Selected row">
+    <section
+      className={`detail ${position}`}
+      style={position === 'bottom' ? { height: size } : { width: size }}
+      aria-label="Selected row"
+    >
       <div className="detail-head">
         <span>Selected row</span>
         <button type="button" className="detail-close" onClick={onClose} aria-label="Close">
@@ -31,9 +38,9 @@ export function Detail({
         <tbody>
           {columns.map((c) => {
             const structured = pretty(row[c.key]);
-            // A structured value gets the whole width, under its label, so
-            // every element keeps a line of its own instead of wrapping into
-            // the next one.
+            // A structured value gets the whole width, under its label, with
+            // every element starting a line of its own; a line too long for
+            // the panel wraps within itself.
             return structured !== null ? (
               <tr key={c.key} className="structured-row">
                 <td colSpan={2}>

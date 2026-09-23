@@ -64,12 +64,12 @@ for a browser).
 | JLECmd | `*.automaticDestinations-ms`, `*.customDestinations-ms` | P1 | todo |
 | RBCmd | Recycle Bin `$I`, `INFO2` | P1 | **done** |
 | RecentFileCacheParser | `RecentFileCache.bcf` | P1 | todo |
-| Registry Explorer | Registry hives (`regf`) | P2 | **done** — keys, values, resident and big-data |
-| rla | Hive transaction logs `.LOG1`/`.LOG2` | P2 | todo |
+| Registry Explorer | Registry hives (`regf`) | P2 | **done** — keys, values, resident and big-data, deleted recovery |
+| rla | Hive transaction logs `.LOG1`/`.LOG2` | P2 | **done** — replayed when opened with the hive |
 | RECmd | Batch queries over hives | P2 | todo |
-| AmcacheParser | `Amcache.hve` | P2 | todo |
-| AppCompatCacheParser | ShimCache in `SYSTEM` | P2 | todo |
-| SBECmd / ShellBags Explorer | Shellbags in `USRCLASS.DAT`/`NTUSER.DAT` | P2 | todo |
+| AmcacheParser | `Amcache.hve` | P2 | **done** — Windows 8 and 10+ layouts, one table per CSV |
+| AppCompatCacheParser | ShimCache in `SYSTEM` | P2 | **done** — XP to Windows 11, via Read as |
+| SBECmd / ShellBags Explorer | Shellbags in `USRCLASS.DAT`/`NTUSER.DAT` | P2 | **done** — live bags, via Read as |
 | EvtxECmd | `.evtx` incl. BinXML and event maps | P3 | **done** |
 | MFTECmd | `$MFT`, `$J`, `$Boot`, `$SDS`, `$I30`, `$LogFile` | P4 | todo |
 | SQLECmd | SQLite + map files | P5 | todo |

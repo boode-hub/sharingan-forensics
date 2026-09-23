@@ -41,21 +41,32 @@ function textOf(n: XNode): string {
   return s;
 }
 
-function collect(n: XNode, out: Map<string, string[]>) {
+/** Calls `visit` with every named field in an event's XML tree, as it is named there. */
+function collect(n: XNode, visit: (name: string, value: string) => void) {
   // <Data Name="TargetUserName">bob</Data> is the field TargetUserName.
   if (n.name === 'Data' && n.attrs.Name !== undefined) {
-    add(out, n.attrs.Name, textOf(n));
+    visit(n.attrs.Name, textOf(n));
   } else if (n.children.length === 0) {
     // A leaf element: UserData payloads name their fields by tag.
-    add(out, n.name, n.text);
+    visit(n.name, n.text);
   }
   // Attributes as Tag_Attr, which is how Sigma names System fields such as
   // Provider_Name.
   for (const [attr, value] of Object.entries(n.attrs)) {
     if (n.name === 'Data' && attr === 'Name') continue;
-    add(out, `${n.name}_${attr}`, value);
+    visit(`${n.name}_${attr}`, value);
   }
-  for (const c of n.children) collect(c, out);
+  for (const c of n.children) collect(c, visit);
+}
+
+function eventTree(row: Row): XNode | null {
+  for (const source of [row.xml, row.payload]) {
+    if (typeof source !== 'string' || !source.startsWith('<')) continue;
+    const tree = parseXml(source);
+    // The full record already contains the payload, so one is enough.
+    if (tree) return tree;
+  }
+  return null;
 }
 
 /**
@@ -67,15 +78,24 @@ export function eventFields(row: Row): Map<string, string[]> {
   const hit = cache.get(row);
   if (hit) return hit;
   const out = new Map<string, string[]>();
-  for (const source of [row.xml, row.payload]) {
-    if (typeof source !== 'string' || !source.startsWith('<')) continue;
-    const tree = parseXml(source);
-    if (tree) collect(tree, out);
-    // The full record already contains the payload, so one is enough.
-    if (out.size > 0) break;
-  }
+  const tree = eventTree(row);
+  if (tree) collect(tree, (name, value) => add(out, name, value));
   cache.set(row, out);
   return out;
+}
+
+/**
+ * Field names found in the events of a sample of rows, as the events spell
+ * them, for suggesting what can be filtered on.
+ */
+export function eventFieldNames(rows: Row[], sample = 300): string[] {
+  const names = new Set<string>();
+  const step = Math.max(1, Math.floor(rows.length / sample));
+  for (let i = 0; i < rows.length; i += step) {
+    const tree = eventTree(rows[i]);
+    if (tree) collect(tree, (name) => names.add(name));
+  }
+  return [...names].sort((a, b) => a.localeCompare(b));
 }
 
 /**

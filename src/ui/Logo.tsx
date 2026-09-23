@@ -34,7 +34,7 @@ export function Logo({ busy = false, size = 34 }: { busy?: boolean; size?: numbe
       width={size}
       height={size}
       role="img"
-      aria-label="4ENSICS"
+      aria-label="4NSEC"
     >
       <defs>
         <g id={eye}>

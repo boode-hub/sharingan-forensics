@@ -15,6 +15,8 @@ export interface WorkRequest {
    * them.
    */
   siblings?: File[];
+  /** Only say what the file is; do not parse it. */
+  detectOnly?: boolean;
 }
 
 /** What the worker can read, announced once so the UI never lists a stale set. */
@@ -34,6 +36,8 @@ export interface WorkerReady {
 
 export interface WorkResult {
   id: number;
+  /** Set on the answer to a detectOnly request. */
+  detected?: boolean;
   fileName: string;
   fileSize: number;
   parser?: { id: string; name: string; ezTool: string; columns: Column[]; tables?: Table[] };
@@ -57,12 +61,22 @@ self.postMessage({
 } satisfies WorkerReady);
 
 self.onmessage = async (e: MessageEvent<WorkRequest>) => {
-  const { id, file, parserId, siblings } = e.data;
+  const { id, file, parserId, siblings, detectOnly } = e.data;
   const started = performance.now();
   const reader = blobReader(file, file.name);
   const base = { id, fileName: file.name, fileSize: file.size };
 
   const parser = parserId ? byId(parserId) : await detect(reader);
+  if (detectOnly) {
+    self.postMessage({
+      ...base,
+      detected: true,
+      parser: parser
+        ? { id: parser.id, name: parser.name, ezTool: parser.ezTool, columns: [] }
+        : undefined,
+    } satisfies WorkResult);
+    return;
+  }
   if (!parser) {
     self.postMessage({
       ...base,

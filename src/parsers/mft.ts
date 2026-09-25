@@ -50,7 +50,7 @@ const columns = [
 const FILE = 0x454c4946;
 
 /** His MftEntryInfo: the upper 16 bits of the entry are multiplied by 2^24, not 2^32. */
-function entryInfo(dv: DataView, at: number): { entry: number; seq: number } {
+export function entryInfo(dv: DataView, at: number): { entry: number; seq: number } {
   const low = dv.getUint32(at, true);
   const high = dv.getUint16(at + 4, true);
   return { entry: high === 0 ? low : (low + high * 16_777_216) >>> 0, seq: dv.getUint16(at + 6, true) };
@@ -66,7 +66,7 @@ const hex8 = (n: number) => (n >>> 0).toString(16).toUpperCase().padStart(8, '0'
 const keyText = (key: number) => `${hex8(Math.floor(key / 65537))}-${hex8((key % 65537) - 1)}`;
 const ROOT = keyOf(5, 5);
 
-type Ticks = bigint | null;
+export type Ticks = bigint | null;
 
 /** DateTimeOffset.FromFileTime rejects anything past 9999-12-31, and he then leaves the time empty. */
 const MAX_FILETIME = 2650467743999999999n;
@@ -76,12 +76,12 @@ const ticksAt = (dv: DataView, at: number): Ticks => {
   const v = dv.getBigInt64(at, true);
   return v > 0n && v <= MAX_FILETIME ? v : null;
 };
-const toDate = (t: Ticks) => (t === null ? null : filetime(t));
+export const toDate = (t: Ticks) => (t === null ? null : filetime(t));
 
 const utf16 = (b: Uint8Array, at: number, len: number) =>
   new TextDecoder('utf-16le').decode(b.subarray(at, Math.max(at, Math.min(at + len, b.length))));
 
-interface FileNameAttr {
+export interface FileNameAttr {
   parent: number;
   parentEntry: number;
   parentSeq: number;
@@ -89,9 +89,31 @@ interface FileNameAttr {
   modified: Ticks;
   record: Ticks;
   accessed: Ticks;
+  physicalSize: bigint;
   logicalSize: bigint;
+  flags: number;
   nameType: number;
   name: string;
+}
+
+/** His FileInfo: the body of a $FILE_NAME, as held in a FILE record or an $I30 index entry. At least 0x42 bytes. */
+export function fileInfo(fc: Uint8Array): FileNameAttr {
+  const cv = new DataView(fc.buffer, fc.byteOffset, fc.byteLength);
+  const parent = entryInfo(cv, 0);
+  return {
+    parent: keyOf(parent.entry, parent.seq),
+    parentEntry: parent.entry,
+    parentSeq: parent.seq,
+    created: ticksAt(cv, 0x8),
+    modified: ticksAt(cv, 0x10),
+    record: ticksAt(cv, 0x18),
+    accessed: ticksAt(cv, 0x20),
+    physicalSize: cv.getBigUint64(0x28, true),
+    logicalSize: cv.getBigUint64(0x30, true),
+    flags: cv.getInt32(0x38, true),
+    nameType: fc[0x41],
+    name: utf16(fc, 0x42, fc[0x40] * 2),
+  };
 }
 
 interface Attr {
@@ -195,20 +217,7 @@ function parseRecord(raw: Uint8Array, offset: number, warn: Warn): Rec | null {
     // A $FILE_NAME is read from its content offset to the end of the attribute.
     const fc = type === 0x30 ? a.subarray(Math.max(0, cOff)) : null;
     if (fc && fc.length >= 0x42) {
-      const cv = new DataView(fc.buffer, fc.byteOffset, fc.byteLength);
-      const parent = entryInfo(cv, 0);
-      attr.fn = {
-        parent: keyOf(parent.entry, parent.seq),
-        parentEntry: parent.entry,
-        parentSeq: parent.seq,
-        created: ticksAt(cv, 0x8),
-        modified: ticksAt(cv, 0x10),
-        record: ticksAt(cv, 0x18),
-        accessed: ticksAt(cv, 0x20),
-        logicalSize: cv.getBigUint64(0x30, true),
-        nameType: fc[0x41],
-        name: utf16(fc, 0x42, fc[0x40] * 2),
-      };
+      attr.fn = fileInfo(fc);
     } else if (type === 0x30) {
       warn(offset + at, `entry 0x${entry.toString(16)}: $FILE_NAME attribute too short to read`);
     }
@@ -236,7 +245,7 @@ export function extension(name: string): string {
 }
 
 // His StandardInfo.Flag.
-const SI_FLAGS: Array<[number, string]> = [
+export const SI_FLAGS: Array<[number, string]> = [
   [0x01, 'ReadOnly'],
   [0x02, 'Hidden'],
   [0x04, 'System'],
@@ -278,7 +287,7 @@ export function dotnetFlags(v: number, names: Array<[number, string]>, zero = '0
     .join('|');
 }
 
-const NAME_TYPES = ['Posix', 'Windows', 'Dos', 'DosWindows'];
+export const NAME_TYPES = ['Posix', 'Windows', 'Dos', 'DosWindows'];
 
 /** His ReparsePoint.SubstituteName, including the offset rules he applies. */
 function substituteName(content: Uint8Array): string {

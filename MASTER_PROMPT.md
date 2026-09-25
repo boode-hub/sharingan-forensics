@@ -119,9 +119,10 @@ colour, per-table tabs, CSV/JSON export.
 2. **RECmd** batch files + **RegistryPlugins** (`EricZimmerman/RECmd`,
    `EricZimmerman/RegistryPlugins`): UserAssist, RecentDocs, OpenSaveMRU,
    BAM, etc. Reuse `openHive`.
-3. **MFTECmd** (`EricZimmerman/MFT`): `$MFT` and `$J` done (`src/parsers/mft.ts`,
-   `usnjrnl.ts`; a `$J` is opened with its volume's `$MFT`, see `mftFor` in
-   `src/ui/cases.ts`); next `$Boot`, `$SDS`, `$I30`.
+3. **MFTECmd** (`EricZimmerman/MFT`): done: `$MFT`, `$J`, `$Boot`, `$SDS`, `$I30`
+   (`src/parsers/{mft,usnjrnl,boot,sds,i30}.ts`; a `$J` is opened with its
+   volume's `$MFT`, see `mftFor` in `src/ui/cases.ts`). Not ported: his
+   `--ds` per-ACE dump, `--ir` resident data, `$MFT` body/file-listing CSVs.
    He does not parse `$LogFile`.
 4. **SQLite family**: SQLECmd (+ his map files), WxTCmd
    (ActivitiesCache.db). Decide sql.js vs a read-only B-tree reader first.

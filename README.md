@@ -29,6 +29,7 @@ phase plan.
 | Jump lists (`.automaticDestinations-ms`, `.customDestinations-ms`) | JLECmd | DestList entries with pins, interaction counts and droids, every embedded shortcut, streams the DestList no longer lists |
 | Recycle Bin (`$I`, `INFO2`) | RBCmd | |
 | `$MFT` | MFTECmd | every in-use and free record, full parent paths, alternate data streams and Zone.Identifier text, SI<FN and the rest of his flags; streamed, so a multi-gigabyte table never sits in memory |
+| `$Boot`, `$Secure:$SDS`, `$I30` | MFTECmd | volume geometry and serial; every security descriptor with owner, group and ACE types; directory index entries, deleted ones recovered from slack |
 | `$J` (USN journal) | MFTECmd | every record his page walk reaches, sparse start found as he finds it; parent paths from the `$MFT` of the same volume when both are opened together (his `-m`) |
 | Everything else | | see SPEC.md |
 

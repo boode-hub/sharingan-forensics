@@ -10,6 +10,7 @@ import {
   artifactFile,
   baseName,
   casesSupported,
+  companionsFor,
   deleteCase,
   dirName,
   droppedFiles,
@@ -196,16 +197,13 @@ export default function App() {
     resizeDetail(detailSize + (e.key === more ? 24 : -24));
   };
 
-  const ingest = useCallback((files: FileList | File[]) => {
-    const all = [...files];
-    for (const file of all) {
+  const ingest = useCallback((all: Incoming[]) => {
+    for (const item of all) {
+      const { file } = item;
       // A registry transaction log is not an artifact in its own right; it is
       // part of the hive beside it. Opening one on its own says nothing, so it
       // is handed to that hive instead of being parsed separately.
-      if (/\.log[12]?$/i.test(file.name)) {
-        const hive = file.name.replace(/\.log[12]?$/i, '');
-        if (all.some((f) => f.name.toLowerCase() === hive.toLowerCase())) continue;
-      }
+      if (isPairedLog(item, all)) continue;
       setBusy((n) => n + 1);
       // Everything in the file is parsed regardless of size — nothing is
       // truncated. But past this point it takes long enough that silence looks
@@ -213,9 +211,7 @@ export default function App() {
       if (file.size >= 64 * 1024 * 1024) {
         setBigFiles((b) => [...b, `${file.name} (${bytes(file.size)})`]);
       }
-      const siblings = all.filter(
-        (f) => f !== file && f.name.toLowerCase().startsWith(`${file.name.toLowerCase()}.log`),
-      );
+      const siblings = companionsFor(item, all).map((c) => c.file);
       const id = nextId++;
       opened.current.set(id, {
         file,
@@ -293,7 +289,7 @@ export default function App() {
       }
       try {
         const file = await artifactFile(caseId, a);
-        const logs = await Promise.all(logsFor(a, list).map((l) => artifactFile(caseId, l)));
+        const logs = await Promise.all(companionsFor(a, list).map((l) => artifactFile(caseId, l)));
         const id = nextId++;
         opened.current.set(id, { file, siblings: logs.length ? logs : undefined, artifactId: a.id });
         setArtifactResult((m) => ({ ...m, [a.id]: id }));
@@ -318,7 +314,7 @@ export default function App() {
     async (incoming: Incoming[]) => {
       if (incoming.length === 0) return;
       if (!caseId) {
-        ingest(incoming.map((i) => i.file));
+        ingest(incoming);
         return;
       }
       setCaseError(null);

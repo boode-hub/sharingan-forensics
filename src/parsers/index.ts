@@ -14,6 +14,7 @@ import { evtx } from './evtx';
 import { jumplist } from './jumplist';
 import { lnk } from './lnk';
 import { mft } from './mft';
+import { usnJrnl } from './usnjrnl';
 import { prefetch } from './prefetch';
 import { registry } from './registry';
 import { shellbags } from './shellbags';
@@ -21,6 +22,6 @@ import { recycleBin } from './recyclebin';
 
 // Amcache before the plain hive: both claim a regf file, and an Amcache.hve
 // is read as Amcache first.
-register(recycleBin, prefetch, evtx, lnk, jumplist, amcache, registry, shellbags, appCompatCache, mft);
+register(recycleBin, prefetch, evtx, lnk, jumplist, amcache, registry, shellbags, appCompatCache, mft, usnJrnl);
 
-export { recycleBin, prefetch, evtx, lnk, jumplist, amcache, registry, shellbags, appCompatCache, mft };
+export { recycleBin, prefetch, evtx, lnk, jumplist, amcache, registry, shellbags, appCompatCache, mft, usnJrnl };

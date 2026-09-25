@@ -96,6 +96,24 @@ export function isPairedLog<T extends { path: string }>(a: T, all: T[]): boolean
   return !!m && all.some((b) => b.path.toLowerCase() === m[1].toLowerCase());
 }
 
+/**
+ * The $MFT a USN journal takes its parent paths from, as MFTECmd's -m does:
+ * the one at the root of the journal's volume (KAPE keeps "C/$Extend/$J"
+ * beside "C/$MFT"), or failing that the only one there is.
+ */
+export function mftFor<T extends { path: string }>(journal: T, all: T[]): T | null {
+  if (!/^\$j$|usnjrnl/i.test(baseName(journal.path))) return null;
+  const mfts = all.filter((a) => baseName(a.path).toLowerCase() === '$mft');
+  const root = dirName(journal.path).replace(/(^|[\\/])\$extend$/i, '');
+  return mfts.find((m) => dirName(m.path) === root) ?? (mfts.length === 1 ? mfts[0] : null);
+}
+
+/** Everything an artifact is read with: a hive's transaction logs, a journal's $MFT. */
+export function companionsFor<T extends { path: string }>(a: T, all: T[]): T[] {
+  const mft = mftFor(a, all);
+  return mft ? [...logsFor(a, all), mft] : logsFor(a, all);
+}
+
 /** OPFS needs a secure context and a browser that can write files from the page. */
 export function casesSupported(): boolean {
   return (

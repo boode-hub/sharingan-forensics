@@ -225,12 +225,12 @@ const recKey = (r: Rec) => keyOf(r.entry, inUse(r) ? r.seq : r.seq - 1);
 const fileNames = (r: Rec) => r.attrs.filter((a) => a.fn).map((a) => a.fn as FileNameAttr);
 const firstLongName = (r: Rec) => fileNames(r).find((f) => f.nameType !== 2) ?? null;
 
-/** Path.GetExtension on Windows. */
-function extension(name: string): string {
+/** Path.GetExtension as .NET 9 has it on Windows (his current builds). */
+export function extension(name: string): string {
   for (let i = name.length - 1; i >= 0; i--) {
     const c = name[i];
     if (c === '.') return i === name.length - 1 ? '' : name.slice(i);
-    if (c === '\\' || c === '/' || c === ':') break;
+    if (c === '\\' || c === '/') break;
   }
   return '';
 }
@@ -262,16 +262,18 @@ const SI_FLAGS: Array<[number, string]> = [
   [0x10000000, 'IsDirectory'],
   [0x20000000, 'IsIndexView'],
 ];
-const KNOWN_SI = SI_FLAGS.reduce((m, [bit]) => m | bit, 0);
 
 /**
- * .NET's ToString of a [Flags] enum, joined with "|" as his map does: names
- * in ascending value order, and the bare number when any bit has no name.
+ * .NET's ToString of a [Flags] enum, joined with "|" as his maps do: names in
+ * ascending value order (the table must be in that order), the bare number
+ * when any bit has no name, and the zero member's name - or "0" - for zero.
  */
-function siFlags(v: number): string {
-  if (v === 0) return 'None';
-  if ((v & ~KNOWN_SI) !== 0) return String(v);
-  return SI_FLAGS.filter(([bit]) => (v & bit) !== 0)
+export function dotnetFlags(v: number, names: Array<[number, string]>, zero = '0'): string {
+  if (v === 0) return zero;
+  const known = names.reduce((m, [bit]) => m | bit, 0);
+  if ((v & ~known) !== 0) return String(v);
+  return names
+    .filter(([bit]) => (v & bit) !== 0)
     .map(([, n]) => n)
     .join('|');
 }
@@ -387,7 +389,7 @@ function csvRow(r: Rec, fn: FileNameAttr, ads: Attr | null, parentPath: (key: nu
     if (fn.modified !== modified) row.LastModified0x30 = toDate(fn.modified);
     if (fn.record !== record) row.LastRecordChange0x30 = toDate(fn.record);
     if (fn.accessed !== accessed) row.LastAccess0x30 = toDate(fn.accessed);
-    row.SiFlags = siFlags(sv.getInt32(0x38, true));
+    row.SiFlags = dotnetFlags(sv.getInt32(0x38, true), SI_FLAGS, 'None');
     // An NTFS 1.2 record's SI stops at 0x48, before the security id and USN.
     if (si.raw.length >= 0x60) {
       row.SecurityId = sv.getInt32(0x4c, true);
@@ -429,6 +431,100 @@ interface ExtensionRec {
   name: DirName | null;
 }
 
+/**
+ * His Mft constructor and BuildMaps, less the attributes: the keys his
+ * dictionaries would hold, where the extension records are, and his
+ * GetFullParentPath over the directory map.
+ */
+async function scan(reader: Reader, ctx: Ctx) {
+  const size = allocatedSize(await reader.bytes(0, 0x20));
+  if (size !== 1024 && size !== 4096) {
+    ctx.warn(0, `the first record gives a record size of ${size}; a $MFT uses 1024 or 4096`);
+    return null;
+  }
+  if (reader.size % size !== 0) ctx.warn(reader.size, `the file is not a whole number of ${size}-byte records; the tail is ignored`);
+
+  // Pass 1: what his dictionaries would hold, keyed as his are, less the
+  // attributes. A record whose key is already taken is skipped, as he skips it.
+  // ponytail: a key per record held in Sets (~50 MB per million records); a typed hash if 10M-record volumes show up.
+  const usedKeys = new Set<number>();
+  const freeKeys = new Set<number>();
+  const skipped = new Set<number>();
+  const extensions = new Map<number, ExtensionRec[]>();
+  const usedDirs = new Map<number, DirName | null>();
+  const freeDirs = new Map<number, DirName | null>();
+
+  for await (const { raw, offset } of records(reader, size, ctx)) {
+    const r = parseRecord(raw, offset, ctx.warn);
+    if (!r) continue;
+    const key = recKey(r);
+    const keys = inUse(r) ? usedKeys : freeKeys;
+    const first = firstLongName(r);
+    const name = first ? { name: first.name, parent: first.parent } : null;
+    if (keys.has(key)) {
+      skipped.add(offset);
+      ctx.warn(offset, `a ${inUse(r) ? '' : 'free '}FILE record with key ${keyText(key)} already exists; skipped, as his tool skips it`);
+    } else {
+      keys.add(key);
+      if (r.base === null && isDir(r)) (inUse(r) ? usedDirs : freeDirs).set(key, name);
+    }
+    // An extension record is filed under its base record even when its own key repeats.
+    if (r.base !== null) {
+      const list = extensions.get(r.base) ?? [];
+      list.push({ offset, dir: isDir(r), name });
+      extensions.set(r.base, list);
+    }
+  }
+
+  const extensionName = (key: number) => extensions.get(key)?.find((e) => e.name)?.name ?? null;
+
+  // His BuildMaps: in-use directories, then free ones, then extension
+  // records whose base record is missing. The first name for a key wins.
+  const dirMap = new Map<number, DirName>();
+  for (const [key, name] of usedDirs) {
+    const n = name ?? extensionName(key);
+    if (n && !dirMap.has(key)) dirMap.set(key, n);
+  }
+  for (const [key, name] of freeDirs) {
+    const n = name ?? (usedKeys.has(key) ? null : extensionName(key));
+    if (n && !dirMap.has(key)) dirMap.set(key, n);
+  }
+  for (const [key, list] of extensions) {
+    if (usedKeys.has(key) || freeKeys.has(key)) continue;
+    for (const e of list) if (e.dir && e.name && !dirMap.has(key)) dirMap.set(key, e.name);
+  }
+  usedDirs.clear();
+  freeDirs.clear();
+
+  const pathCache = new Map<number, string>();
+  const parentPath = (key: number): string => {
+    const hit = pathCache.get(key);
+    if (hit !== undefined) return hit;
+    const parts: string[] = [];
+    const seen = new Set<number>();
+    let k = key;
+    // A directory that is its own ancestor would loop his walk forever; this stops at the repeat.
+    for (let d = dirMap.get(k); d && !seen.has(k); d = dirMap.get(k)) {
+      seen.add(k);
+      parts.push(d.name);
+      if (k === ROOT) break;
+      k = d.parent;
+    }
+    if (k !== ROOT) parts.push(`.\\PathUnknown\\Directory with ID 0x${keyText(k)}`);
+    const path = parts.reverse().join('\\');
+    pathCache.set(key, path);
+    return path;
+  };
+
+  return { size, usedKeys, skipped, extensions, parentPath };
+}
+
+/** His GetFullParentPath from a $MFT, by entry and sequence number: what a $J row's ParentPath is when MFTECmd is given the $MFT with -m. */
+export async function mftParentPaths(reader: Reader, ctx: Ctx): Promise<((entry: number, seq: number) => string) | null> {
+  const s = await scan(reader, ctx);
+  return s && ((entry, seq) => s.parentPath(keyOf(entry, seq)));
+}
+
 export const mft: Parser = {
   id: 'mft',
   name: '$MFT',
@@ -440,87 +536,12 @@ export const mft: Parser = {
     return magic(head, 'FILE', 0) && (size === 1024 || size === 4096);
   },
   async *parse(reader: Reader, ctx: Ctx): AsyncGenerator<Row> {
-    const size = allocatedSize(await reader.bytes(0, 0x20));
-    if (size !== 1024 && size !== 4096) {
-      ctx.warn(0, `the first record gives a record size of ${size}; a $MFT uses 1024 or 4096`);
-      return;
-    }
-    if (reader.size % size !== 0) ctx.warn(reader.size, `the file is not a whole number of ${size}-byte records; the tail is ignored`);
-
-    // Pass 1: what his dictionaries would hold, keyed as his are, less the
-    // attributes. A record whose key is already taken is skipped, as he skips it.
-    // ponytail: a key per record held in Sets (~50 MB per million records); a typed hash if 10M-record volumes show up.
-    const usedKeys = new Set<number>();
-    const freeKeys = new Set<number>();
-    const skipped = new Set<number>();
-    const extensions = new Map<number, ExtensionRec[]>();
-    const usedDirs = new Map<number, DirName | null>();
-    const freeDirs = new Map<number, DirName | null>();
-
-    for await (const { raw, offset } of records(reader, size, ctx)) {
-      const r = parseRecord(raw, offset, ctx.warn);
-      if (!r) continue;
-      const key = recKey(r);
-      const keys = inUse(r) ? usedKeys : freeKeys;
-      const first = firstLongName(r);
-      const name = first ? { name: first.name, parent: first.parent } : null;
-      if (keys.has(key)) {
-        skipped.add(offset);
-        ctx.warn(offset, `a ${inUse(r) ? '' : 'free '}FILE record with key ${keyText(key)} already exists; skipped, as his tool skips it`);
-      } else {
-        keys.add(key);
-        if (r.base === null && isDir(r)) (inUse(r) ? usedDirs : freeDirs).set(key, name);
-      }
-      // An extension record is filed under its base record even when its own key repeats.
-      if (r.base !== null) {
-        const list = extensions.get(r.base) ?? [];
-        list.push({ offset, dir: isDir(r), name });
-        extensions.set(r.base, list);
-      }
-    }
-
+    const s = await scan(reader, ctx);
+    if (!s) return;
+    const { size, usedKeys, skipped, extensions, parentPath } = s;
     // Extension records are merged into the in-use record with their base key,
     // or failing that the free one.
     const mergesInto = (r: Rec) => inUse(r) || !usedKeys.has(recKey(r));
-    const extensionName = (key: number) => extensions.get(key)?.find((e) => e.name)?.name ?? null;
-
-    // His BuildMaps: in-use directories, then free ones, then extension
-    // records whose base record is missing. The first name for a key wins.
-    const dirMap = new Map<number, DirName>();
-    for (const [key, name] of usedDirs) {
-      const n = name ?? extensionName(key);
-      if (n && !dirMap.has(key)) dirMap.set(key, n);
-    }
-    for (const [key, name] of freeDirs) {
-      const n = name ?? (usedKeys.has(key) ? null : extensionName(key));
-      if (n && !dirMap.has(key)) dirMap.set(key, n);
-    }
-    for (const [key, list] of extensions) {
-      if (usedKeys.has(key) || freeKeys.has(key)) continue;
-      for (const e of list) if (e.dir && e.name && !dirMap.has(key)) dirMap.set(key, e.name);
-    }
-    usedDirs.clear();
-    freeDirs.clear();
-
-    const pathCache = new Map<number, string>();
-    const parentPath = (key: number): string => {
-      const hit = pathCache.get(key);
-      if (hit !== undefined) return hit;
-      const parts: string[] = [];
-      const seen = new Set<number>();
-      let k = key;
-      // A directory that is its own ancestor would loop his walk forever; this stops at the repeat.
-      for (let d = dirMap.get(k); d && !seen.has(k); d = dirMap.get(k)) {
-        seen.add(k);
-        parts.push(d.name);
-        if (k === ROOT) break;
-        k = d.parent;
-      }
-      if (k !== ROOT) parts.push(`.\\PathUnknown\\Directory with ID 0x${keyText(k)}`);
-      const path = parts.reverse().join('\\');
-      pathCache.set(key, path);
-      return path;
-    };
 
     // His FileRecords, then his FreeFileRecords.
     for (const wanted of [true, false]) {

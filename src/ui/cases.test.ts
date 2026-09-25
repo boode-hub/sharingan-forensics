@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { baseName, dirName, isArtifactList, isCaseList, isPairedLog, logsFor, newCase } from './cases';
+import { baseName, companionsFor, dirName, isArtifactList, isCaseList, isPairedLog, logsFor, mftFor, newCase } from './cases';
 
 const a = (path: string) => ({ path });
 
@@ -23,6 +23,17 @@ describe('case artifacts', () => {
       'C/Users/bob/NTUSER.DAT.LOG2',
       'C/Users/eve/NTUSER.DAT.LOG1',
     ]);
+  });
+
+  it("gives a $J the $MFT from its own volume, as MFTECmd's -m", () => {
+    const all = [a('C/$MFT'), a('C/$Extend/$J'), a('D/$MFT'), a('D/$Extend/$J'), a('C/Windows/System32/config/SYSTEM')];
+    expect(mftFor(all[1], all)?.path).toBe('C/$MFT');
+    expect(mftFor(all[3], all)?.path).toBe('D/$MFT');
+    expect(mftFor(all[4], all)).toBe(null);
+    expect(companionsFor(all[1], all).map((x) => x.path)).toEqual(['C/$MFT']);
+    // Loose files, or the only $MFT there is.
+    expect(mftFor(a('$J'), [a('$J'), a('$MFT')])?.path).toBe('$MFT');
+    expect(mftFor(a('x/$UsnJrnl%3A$J'), [a('elsewhere/$MFT')])?.path).toBe('elsewhere/$MFT');
   });
 
   it('keeps a log listed when its hive is not in the case', () => {

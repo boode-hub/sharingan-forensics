@@ -7,7 +7,7 @@
  * Sigma engine both ask for fields by name, so both come through here, and a
  * name resolves to a column first and to the event's own fields second.
  */
-import type { Column, Row } from '../core/types';
+import type { Column, Row, Table } from '../core/types';
 import { parseXml, type XNode } from '../parsers/evtx/xpath';
 
 /** Case, spaces and punctuation ignored: "Event Id", "eventId" and "EventID" are one field. */
@@ -111,4 +111,29 @@ export function fieldValues(row: Row, field: string, index: Map<string, string>)
     return v === null || v === undefined ? [] : [v];
   }
   return eventFields(row).get(norm(field)) ?? [];
+}
+
+/**
+ * Tables for rows that name one (`row.table`) when their parser could not
+ * declare them in advance: a SQLite map's query results have whatever columns
+ * the query selects. A table's columns are its first row's keys; a column is
+ * numeric when its first non-empty value in the first rows is a number.
+ */
+export function tablesFromRows(rows: Row[], sample = 200): Table[] {
+  const tables = new Map<string, { table: Table; seen: number }>();
+  for (const r of rows) {
+    if (typeof r.table !== 'string') continue;
+    let t = tables.get(r.table);
+    if (!t) {
+      const keys = Object.keys(r).filter((k) => k !== 'table');
+      t = { table: { id: r.table, label: r.table, columns: keys.map((key) => ({ key, label: key })) }, seen: 0 };
+      tables.set(r.table, t);
+    }
+    if (t.seen++ >= sample) continue;
+    for (const c of t.table.columns) {
+      const v = r[c.key];
+      if (c.type === undefined && v !== null && v !== undefined && v !== '') c.type = typeof v === 'number' ? 'num' : 'str';
+    }
+  }
+  return [...tables.values()].map((t) => t.table);
 }

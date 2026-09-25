@@ -31,6 +31,7 @@ phase plan.
 | `RecentFileCache.bcf` | RecentFileCacheParser | Windows 7 program execution list |
 | `$MFT` | MFTECmd | every in-use and free record, full parent paths, alternate data streams and Zone.Identifier text, SI<FN and the rest of his flags; streamed, so a multi-gigabyte table never sits in memory |
 | `$Boot`, `$Secure:$SDS`, `$I30` | MFTECmd | volume geometry and serial; every security descriptor with owner, group and ACE types; directory index entries, deleted ones recovered from slack |
+| SQLite databases | SQLECmd | all 93 of his maps (browsers, Windows, Android and more), one tab per CSV he writes; a `-wal` beside the database is applied as SQLite applies it; a database no map knows is listed table by table |
 | `$J` (USN journal) | MFTECmd | every record his page walk reaches, sparse start found as he finds it; parent paths from the `$MFT` of the same volume when both are opened together (his `-m`) |
 | Everything else | | see SPEC.md |
 

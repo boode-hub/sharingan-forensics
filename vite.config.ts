@@ -11,4 +11,7 @@ export default defineConfig({
   // them out, so a session that only opens event logs never downloads the
   // GUID table and the other way round.
   worker: { format: 'es' },
+  // SQLite's WebAssembly is bundled as bytes (sql-wasm.wasm?inline) so it is
+  // never fetched; Vite only inlines a file it treats as an asset.
+  assetsInclude: ['**/*.wasm'],
 })

@@ -36,6 +36,12 @@ describe('case artifacts', () => {
     expect(mftFor(a('x/$UsnJrnl%3A$J'), [a('elsewhere/$MFT')])?.path).toBe('elsewhere/$MFT');
   });
 
+  it("reads a SQLite database with its write-ahead log", () => {
+    const all = [a('C/Users/bob/ActivitiesCache.db'), a('C/Users/bob/ActivitiesCache.db-wal'), a('C/Users/bob/ActivitiesCache.db-shm')];
+    expect(logsFor(all[0], all).map((x) => x.path)).toEqual(['C/Users/bob/ActivitiesCache.db-wal']);
+    expect(all.filter((x) => isPairedLog(x, all)).map((x) => x.path)).toEqual(['C/Users/bob/ActivitiesCache.db-wal']);
+  });
+
   it('keeps a log listed when its hive is not in the case', () => {
     const all = [a('SYSTEM.LOG1')];
     expect(isPairedLog(all[0], all)).toBe(false);

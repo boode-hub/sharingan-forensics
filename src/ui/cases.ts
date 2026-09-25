@@ -78,21 +78,21 @@ export function isArtifactList(v: unknown): v is CaseArtifact[] {
 }
 
 /**
- * The transaction logs that belong to a hive: files beside it named
- * "<hive>.LOG", ".LOG1" or ".LOG2". Paths are compared case-insensitively, as
- * Windows names them.
+ * The transaction logs that belong to a file: a hive's "<hive>.LOG", ".LOG1"
+ * or ".LOG2", and a SQLite database's "<db>-wal" write-ahead log. Paths are
+ * compared case-insensitively, as Windows names them.
  */
 export function logsFor<T extends { path: string }>(hive: T, all: T[]): T[] {
   const base = hive.path.toLowerCase();
   return all.filter((a) => {
     const p = a.path.toLowerCase();
-    return a !== hive && p.startsWith(base) && /^\.log[12]?$/.test(p.slice(base.length));
+    return a !== hive && p.startsWith(base) && /^(\.log[12]?|-wal)$/.test(p.slice(base.length));
   });
 }
 
-/** A transaction log whose hive is also present, and so is read with it rather than on its own. */
+/** A transaction log whose hive or database is also present, and so is read with it rather than on its own. */
 export function isPairedLog<T extends { path: string }>(a: T, all: T[]): boolean {
-  const m = /^(.*)\.log[12]?$/i.exec(a.path);
+  const m = /^(.*)(\.log[12]?|-wal)$/i.exec(a.path);
   return !!m && all.some((b) => b.path.toLowerCase() === m[1].toLowerCase());
 }
 

@@ -3,6 +3,7 @@ import { blobReader } from './core/reader';
 import { byId, detect, parsers, run } from './core/registry';
 import type { Column, Table } from './core/types';
 import './parsers';
+import { tablesFromRows } from './ui/fields';
 
 export interface WorkRequest {
   id: number;
@@ -98,7 +99,8 @@ self.onmessage = async (e: MessageEvent<WorkRequest>) => {
       name: parser.name,
       ezTool: parser.ezTool,
       columns: parser.columns,
-      tables: parser.tables,
+      // A parser that cannot know its tables until it runs names them on its rows.
+      tables: parser.tables ?? (outcome.rows.some((r) => typeof r.table === 'string') ? tablesFromRows(outcome.rows) : undefined),
     },
     rows: outcome.rows,
     warnings: outcome.warnings,

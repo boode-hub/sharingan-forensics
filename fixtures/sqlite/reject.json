@@ -1,0 +1,4 @@
+{
+  "_comment": "notes.db-wal is a write-ahead log, read only with notes.db; make-wal.py is the script that wrote the pair. Neither is a database.",
+  "reject": ["notes.db-wal", "make-wal.py"]
+}

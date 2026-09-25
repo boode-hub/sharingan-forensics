@@ -124,8 +124,9 @@ colour, per-table tabs, CSV/JSON export.
    volume's `$MFT`, see `mftFor` in `src/ui/cases.ts`). Not ported: his
    `--ds` per-ACE dump, `--ir` resident data, `$MFT` body/file-listing CSVs.
    He does not parse `$LogFile`.
-4. **SQLite family**: SQLECmd (+ his map files), WxTCmd
-   (ActivitiesCache.db). Decide sql.js vs a read-only B-tree reader first.
+4. **SQLite family**: SQLECmd done (`src/parsers/sqlite.ts`, sql.js with
+   the WASM inlined, maps from `scripts/gen-sqlmaps.mjs`, `-wal` applied).
+   Next WxTCmd (ActivitiesCache.db) on the same engine.
 5. **ESE family**: SrumECmd, SumECmd — a handwritten ESE page/table parser.
 6. **SDB Explorer**, **bstrings**, **Hasher** (SubtleCrypto has no MD5:
    port one), **iisGeolocate** (user-supplied MaxMind file, no network).

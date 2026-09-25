@@ -126,7 +126,7 @@ colour, per-table tabs, CSV/JSON export.
    He does not parse `$LogFile`.
 4. **SQLite family**: SQLECmd done (`src/parsers/sqlite.ts`, sql.js with
    the WASM inlined, maps from `scripts/gen-sqlmaps.mjs`, `-wal` applied).
-   Next WxTCmd (ActivitiesCache.db) on the same engine.
+   WxTCmd done (`src/parsers/wxtcmd.ts`, same engine via `openSqlite`).
 5. **ESE family**: SrumECmd, SumECmd — a handwritten ESE page/table parser.
 6. **SDB Explorer**, **bstrings**, **Hasher** (SubtleCrypto has no MD5:
    port one), **iisGeolocate** (user-supplied MaxMind file, no network).

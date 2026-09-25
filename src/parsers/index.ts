@@ -24,9 +24,10 @@ import { shellbags } from './shellbags';
 import { recentFileCache } from './recentfilecache';
 import { recycleBin } from './recyclebin';
 import { sqliteDb } from './sqlite';
+import { wxtcmd } from './wxtcmd';
 
 // Amcache before the plain hive: both claim a regf file, and an Amcache.hve
 // is read as Amcache first.
-register(recycleBin, prefetch, evtx, lnk, jumplist, amcache, registry, shellbags, appCompatCache, mft, usnJrnl, boot, sds, i30, recentFileCache, sqliteDb);
+register(recycleBin, prefetch, evtx, lnk, jumplist, amcache, registry, shellbags, appCompatCache, mft, usnJrnl, boot, sds, i30, recentFileCache, wxtcmd, sqliteDb);
 
-export { recycleBin, prefetch, evtx, lnk, jumplist, amcache, registry, shellbags, appCompatCache, mft, usnJrnl, boot, sds, i30, recentFileCache, sqliteDb };
+export { recycleBin, prefetch, evtx, lnk, jumplist, amcache, registry, shellbags, appCompatCache, mft, usnJrnl, boot, sds, i30, recentFileCache, wxtcmd, sqliteDb };

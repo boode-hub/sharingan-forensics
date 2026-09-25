@@ -73,7 +73,7 @@ for a browser).
 | EvtxECmd | `.evtx` incl. BinXML and event maps | P3 | **done** |
 | MFTECmd | `$MFT`, `$J`, `$Boot`, `$SDS`, `$I30` (he does not parse `$LogFile`) | P4 | **done** |
 | SQLECmd | SQLite + map files | P5 | **done** — all 93 of his maps; `-wal` applied |
-| WxTCmd | `ActivitiesCache.db` | P5 | todo |
+| WxTCmd | `ActivitiesCache.db` | P5 | **done** |
 | SrumECmd | `SRUDB.dat` (ESE) | P5 | todo |
 | SumECmd | SUM `.mdb` (ESE) | P5 | todo |
 | SDB Explorer | Shim databases `.sdb` | P6 | todo |

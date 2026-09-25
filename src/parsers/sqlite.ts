@@ -19,7 +19,7 @@
  * SQLite applies it on open: every frame up to the last valid commit, checked
  * against the WAL's salts and checksums (https://sqlite.org/fileformat2.html#walformat).
  */
-import type { SqlJsStatic, SqlValue } from 'sql.js';
+import type { Database, SqlJsStatic, SqlValue } from 'sql.js';
 import type { Ctx, Parser, Reader, Row } from '../core/types';
 import { magic } from '../core/binary';
 
@@ -109,32 +109,42 @@ function value(v: SqlValue): unknown {
 
 const quoteIdent = (s: string) => `"${s.replaceAll('"', '""')}"`;
 
+export const isSqlite = (head: Uint8Array) => magic(head, 'SQLite format 3\0', 0);
+
+/**
+ * The database as his tools see it when they open it in place: with its
+ * write-ahead log, when one was opened alongside, already applied. Null (and
+ * a warning) when SQLite cannot open it.
+ */
+export async function openSqlite(reader: Reader, ctx: Ctx): Promise<Database | null> {
+  // ponytail: the whole database is held in memory, twice while SQLite copies it in; fine for browser
+  // and Windows databases (tens to hundreds of MB), a paged VFS if multi-GB ones turn up.
+  let bytes: Uint8Array = (await reader.bytes(0, reader.size)).slice();
+  const wal = ctx.siblings?.find((s) => /-wal$/i.test(s.name));
+  if (wal) bytes = applyWal(bytes, await wal.bytes(0, wal.size), (m) => ctx.warn(0, `${wal.name}: ${m}`));
+  // A WAL-mode header makes SQLite look for a -wal of its own; with the log
+  // already applied (or absent), the file is read as a plain database.
+  if (bytes[18] === 2) bytes[18] = 1;
+  if (bytes[19] === 2) bytes[19] = 1;
+  const SQL = await sqlite();
+  try {
+    return new SQL.Database(bytes);
+  } catch (e) {
+    ctx.warn(0, `SQLite could not open the database: ${(e as Error).message}`);
+    return null;
+  }
+}
+
 export const sqliteDb: Parser = {
   id: 'sqlite',
   name: 'SQLite database',
   ezTool: 'SQLECmd',
   extensions: [],
   columns: [],
-  sniff: (head: Uint8Array) => magic(head, 'SQLite format 3\0', 0),
+  sniff: isSqlite,
   async *parse(reader: Reader, ctx: Ctx): AsyncGenerator<Row> {
-    // ponytail: the whole database is held in memory, twice while SQLite copies it in; fine for browser
-    // and Windows databases (tens to hundreds of MB), a paged VFS if multi-GB ones turn up.
-    let bytes: Uint8Array = (await reader.bytes(0, reader.size)).slice();
-    const wal = ctx.siblings?.find((s) => /-wal$/i.test(s.name));
-    if (wal) bytes = applyWal(bytes, await wal.bytes(0, wal.size), (m) => ctx.warn(0, `${wal.name}: ${m}`));
-    // A WAL-mode header makes SQLite look for a -wal of its own; with the log
-    // already applied (or absent), the file is read as a plain database.
-    if (bytes[18] === 2) bytes[18] = 1;
-    if (bytes[19] === 2) bytes[19] = 1;
-
-    const [SQL, { SQL_MAPS }] = await Promise.all([sqlite(), import('./sqlite/maps')]);
-    let db;
-    try {
-      db = new SQL.Database(bytes);
-    } catch (e) {
-      ctx.warn(0, `SQLite could not open the database: ${(e as Error).message}`);
-      return;
-    }
+    const [db, { SQL_MAPS }] = await Promise.all([openSqlite(reader, ctx), import('./sqlite/maps')]);
+    if (!db) return;
     const source = reader.name;
     const scalar = (sql: string): string | null => {
       const st = db.prepare(sql);

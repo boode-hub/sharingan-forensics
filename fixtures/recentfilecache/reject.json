@@ -1,0 +1,4 @@
+{
+  "_comment": "NotARecentFileCache.bcf is from his test corpus: a shortcut (.lnk) renamed .bcf. It must open as what it is, not as a RecentFileCache.",
+  "reject": ["NotARecentFileCache.bcf"]
+}

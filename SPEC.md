@@ -63,7 +63,7 @@ for a browser).
 | LECmd | Shortcuts `.lnk` | P1 | **done** |
 | JLECmd | `*.automaticDestinations-ms`, `*.customDestinations-ms` | P1 | **done** |
 | RBCmd | Recycle Bin `$I`, `INFO2` | P1 | **done** |
-| RecentFileCacheParser | `RecentFileCache.bcf` | P1 | todo |
+| RecentFileCacheParser | `RecentFileCache.bcf` | P1 | **done** |
 | Registry Explorer | Registry hives (`regf`) | P2 | **done** — keys, values, resident and big-data, deleted recovery |
 | rla | Hive transaction logs `.LOG1`/`.LOG2` | P2 | **done** — replayed when opened with the hive |
 | RECmd | Batch queries over hives | P2 | todo |

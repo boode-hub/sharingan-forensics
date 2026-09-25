@@ -115,7 +115,7 @@ colour, per-table tabs, CSV/JSON export.
 
 ## Next, in order
 
-1. **RecentFileCacheParser** (`EricZimmerman/RecentFileCacheParser`) — small.
+1. ~~RecentFileCacheParser~~ done.
 2. **RECmd** batch files + **RegistryPlugins** (`EricZimmerman/RECmd`,
    `EricZimmerman/RegistryPlugins`): UserAssist, RecentDocs, OpenSaveMRU,
    BAM, etc. Reuse `openHive`.

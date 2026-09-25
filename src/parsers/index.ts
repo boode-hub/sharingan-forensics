@@ -21,10 +21,11 @@ import { usnJrnl } from './usnjrnl';
 import { prefetch } from './prefetch';
 import { registry } from './registry';
 import { shellbags } from './shellbags';
+import { recentFileCache } from './recentfilecache';
 import { recycleBin } from './recyclebin';
 
 // Amcache before the plain hive: both claim a regf file, and an Amcache.hve
 // is read as Amcache first.
-register(recycleBin, prefetch, evtx, lnk, jumplist, amcache, registry, shellbags, appCompatCache, mft, usnJrnl, boot, sds, i30);
+register(recycleBin, prefetch, evtx, lnk, jumplist, amcache, registry, shellbags, appCompatCache, mft, usnJrnl, boot, sds, i30, recentFileCache);
 
-export { recycleBin, prefetch, evtx, lnk, jumplist, amcache, registry, shellbags, appCompatCache, mft, usnJrnl, boot, sds, i30 };
+export { recycleBin, prefetch, evtx, lnk, jumplist, amcache, registry, shellbags, appCompatCache, mft, usnJrnl, boot, sds, i30, recentFileCache };

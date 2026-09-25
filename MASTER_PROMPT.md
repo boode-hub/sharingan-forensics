@@ -119,9 +119,9 @@ colour, per-table tabs, CSV/JSON export.
 2. **RECmd** batch files + **RegistryPlugins** (`EricZimmerman/RECmd`,
    `EricZimmerman/RegistryPlugins`): UserAssist, RecentDocs, OpenSaveMRU,
    BAM, etc. Reuse `openHive`.
-3. **MFTECmd** (`EricZimmerman/MFT`): `$MFT` (fixups, parent path
-   resolution in a second pass, multi-GB input), `$J`, `$Boot`, `$SDS`,
-   `$I30`, `$LogFile`.
+3. **MFTECmd** (`EricZimmerman/MFT`): `$MFT` done (`src/parsers/mft.ts`);
+   next `$J` (paths from a `$MFT` opened alongside), `$Boot`, `$SDS`, `$I30`.
+   He does not parse `$LogFile`.
 4. **SQLite family**: SQLECmd (+ his map files), WxTCmd
    (ActivitiesCache.db). Decide sql.js vs a read-only B-tree reader first.
 5. **ESE family**: SrumECmd, SumECmd — a handwritten ESE page/table parser.

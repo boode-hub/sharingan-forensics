@@ -71,7 +71,7 @@ for a browser).
 | AppCompatCacheParser | ShimCache in `SYSTEM` | P2 | **done** — XP to Windows 11, via Read as |
 | SBECmd / ShellBags Explorer | Shellbags in `USRCLASS.DAT`/`NTUSER.DAT` | P2 | **done** — live bags, via Read as |
 | EvtxECmd | `.evtx` incl. BinXML and event maps | P3 | **done** |
-| MFTECmd | `$MFT`, `$J`, `$Boot`, `$SDS`, `$I30`, `$LogFile` | P4 | todo |
+| MFTECmd | `$MFT`, `$J`, `$Boot`, `$SDS`, `$I30` (he does not parse `$LogFile`) | P4 | wip — `$MFT` done |
 | SQLECmd | SQLite + map files | P5 | todo |
 | WxTCmd | `ActivitiesCache.db` | P5 | todo |
 | SrumECmd | `SRUDB.dat` (ESE) | P5 | todo |

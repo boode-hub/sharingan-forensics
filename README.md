@@ -28,6 +28,7 @@ phase plan.
 | Shortcuts (`.lnk`) | LECmd | target ID list (every shell item type his library decodes, property stores included), tracker block and MAC vendor, every extra data block |
 | Jump lists (`.automaticDestinations-ms`, `.customDestinations-ms`) | JLECmd | DestList entries with pins, interaction counts and droids, every embedded shortcut, streams the DestList no longer lists |
 | Recycle Bin (`$I`, `INFO2`) | RBCmd | |
+| `$MFT` | MFTECmd | every in-use and free record, full parent paths, alternate data streams and Zone.Identifier text, SI<FN and the rest of his flags; streamed, so a multi-gigabyte table never sits in memory |
 | Everything else | | see SPEC.md |
 
 ## Finding things

@@ -1858,3 +1858,156 @@ main[hidden] {
   color: var(--accent-ink);
   font-weight: 600;
 }
+
+/* Collect: every KAPE target, each path pickable, the rest for KAPE. */
+.collect-btn {
+  width: 100%;
+  margin-top: 6px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+.collect-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.collect-page .toolbar select,
+.collect-page .where {
+  padding: 5px 6px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 12px;
+}
+.collect-page .where {
+  width: 150px;
+  font-family: var(--mono);
+}
+.collect-page .check {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.collect-status {
+  margin: 0;
+  padding: 6px 12px;
+  background: var(--accent-bg);
+  border-bottom: 1px solid var(--accent-border);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.collect-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px 12px 12px;
+}
+.ct {
+  border-bottom: 1px solid var(--border);
+}
+.ct-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 12.5px;
+  min-width: 0;
+}
+.ct-name {
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--text);
+  font: 600 12.5px var(--mono);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ct-name::before {
+  content: '▸ ';
+  color: var(--text-muted);
+}
+.ct.open .ct-name::before {
+  content: '▾ ';
+}
+.ct-name:hover {
+  color: var(--accent);
+}
+.ct-group {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.ct-desc {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+.reader {
+  flex: none;
+  padding: 1px 7px;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.reader.none {
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+.ct-body {
+  padding: 0 0 8px 22px;
+}
+.ct-inc {
+  margin: 0 0 6px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+.ce {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-top: 1px dashed var(--border);
+}
+.ce-what {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.ce-name {
+  font-size: 12px;
+}
+.ce code {
+  font: 11.5px var(--mono);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.ce .caveat {
+  color: var(--warn);
+  font-size: 11px;
+}
+.ce button {
+  flex: none;
+  padding: 4px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 12px;
+}
+.ce button:hover {
+  border-color: var(--accent);
+}
+.collect-foot {
+  border-top: 1px solid var(--border);
+  border-bottom: 0;
+}

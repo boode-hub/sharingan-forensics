@@ -4,6 +4,7 @@ import { CasePanel } from './ui/CasePanel';
 import { ArtifactPanel } from './ui/ArtifactPanel';
 import { Viewer } from './ui/Viewer';
 import { AddEventDialog, TimelineView, type Pending } from './ui/TimelineView';
+import { Collect } from './ui/CollectView';
 import { EMPTY_TIMELINE, type Timeline, type TimelineEvent } from './ui/timeline';
 import {
   addToCase,
@@ -103,7 +104,7 @@ export default function App() {
   const [saved, setSaved] = useState<SavedFilter[]>(() => read('savedFilters', [], isSavedList));
 
   // The investigation timeline: kept with the case, or for this session only.
-  const [view, setView] = useState<'artifacts' | 'timeline'>('artifacts');
+  const [view, setView] = useState<'artifacts' | 'timeline' | 'collect'>('artifacts');
   const [timeline, setTimelineState] = useState<Timeline>(EMPTY_TIMELINE);
   const [pending, setPending] = useState<Pending | null>(null);
   const [lastLane, setLastLane] = useState<string | null>(null);
@@ -605,6 +606,9 @@ export default function App() {
           <button type="button" role="radio" aria-checked={view === 'timeline'} className={view === 'timeline' ? 'on' : ''} onClick={() => setView('timeline')}>
             Timeline{timeline.events.length ? ` (${timeline.events.length})` : ''}
           </button>
+          <button type="button" role="radio" aria-checked={view === 'collect'} className={view === 'collect' ? 'on' : ''} onClick={() => setView('collect')}>
+            Collect
+          </button>
         </div>
         <span className="spacer" />
         <div className="settings">
@@ -682,6 +686,9 @@ export default function App() {
               {caseId ? 'Add folder…' : 'Open folder…'}
             </label>
           </div>
+          <button type="button" className="pick collect-btn" onClick={() => setView('collect')}>
+            Collect known artifacts…
+          </button>
 
           {importing && (
             <p className="busy importing">
@@ -755,6 +762,11 @@ export default function App() {
           )}
         </aside>
 
+        {view === 'collect' && (
+          <main>
+            <Collect parsers={known} inCase={!!caseId} onPick={addIncoming} />
+          </main>
+        )}
         {view === 'timeline' && (
           <main>
             <TimelineView

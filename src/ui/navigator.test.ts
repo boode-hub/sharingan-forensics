@@ -63,6 +63,15 @@ describe('the folder tree', () => {
     expect(bob.folders.map((f) => f.name)).toEqual(['AppData/Local/Temp']);
     expect(c.folders[1].folders.map((f) => f.name)).toEqual(['Prefetch', 'System32']);
   });
+
+  it('treats folders as Windows does, ignoring case', () => {
+    const w = buildTree([...all, e('C/windows/prefetch/X.EXE-1.pf', 'prefetch')]).folders[0].folders[1];
+    expect(w.name).toBe('Windows');
+    expect(w.folders.map((f) => [f.name, f.entries.length])).toEqual([
+      ['Prefetch', 2],
+      ['System32', 0],
+    ]);
+  });
 });
 
 describe('sorting and the quick switcher', () => {

@@ -135,10 +135,10 @@ export function buildTree(entries: Entry[]): TreeNode {
     let node = root;
     node.count++;
     for (const part of e.dir.split(/[\\/]/).filter(Boolean)) {
-      const path = node.path ? `${node.path}/${part}` : part;
-      let next = node.folders.find((f) => f.name === part && f.path === path);
+      // Windows paths ignore case: KAPE's "prefetch" is the drive's "Prefetch".
+      let next = node.folders.find((f) => f.name.toLowerCase() === part.toLowerCase());
       if (!next) {
-        next = { name: part, path, folders: [], entries: [], count: 0 };
+        next = { name: part, path: node.path ? `${node.path}/${part}` : part, folders: [], entries: [], count: 0 };
         node.folders.push(next);
       }
       next.count++;

@@ -115,7 +115,12 @@ colour, per-table tabs, CSV/JSON export. Cases in OPFS with cancellable
 upload, artifact navigator (Ctrl+K, filter syntax, categories), split panes.
 Investigation timeline (`src/ui/timeline.ts`, `TimelineView.tsx`): right-click
 a row → add to a lane, saved per case, click back to the source row, HTML /
-CSV / JSON report.
+CSV / JSON report. Collect (`src/ui/collect.ts`, `CollectView.tsx`): every
+KapeFiles target (`scripts/gen-collect.mjs .refs/KapeFiles/Targets
+.refs/SQLECmd/SQLMap/Maps` → `src/ui/kapeTargets.ts`, lazy chunk) with the
+parsers here that read it; the path goes on the clipboard and the file dialog
+opens; locked files get a KAPE command line. A new parser must be named in the
+generator's `reads()` rules — `collect.test.ts` fails until it is.
 
 ## Next, in order
 

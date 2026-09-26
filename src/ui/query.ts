@@ -23,7 +23,7 @@
  */
 import type { Column, Row } from '../core/types';
 import { columnIndex, fieldValues, norm } from './fields';
-import { fmt } from './format';
+import { compareTimes, fmt, parseTime } from './format';
 
 /**
  * Matches one value against a comparison the way a column filter always has.
@@ -38,13 +38,13 @@ import { fmt } from './format';
  *   <100          numerically less than 100
  *   =4624         exactly equal, so 4624 does not also match 14624
  */
-export function matches(value: unknown, expr: string): boolean {
+export function matches(value: unknown, expr: string, zone = 'UTC'): boolean {
   const e = expr.trim();
   if (!e) return true;
-  if (e.startsWith('!')) return !matches(value, e.slice(1));
+  if (e.startsWith('!')) return !matches(value, e.slice(1), zone);
 
   const op = /^(>=|<=|>|<|=)(.*)$/.exec(e);
-  if (!op) return fmt(value).toLowerCase().includes(e.toLowerCase());
+  if (!op) return fmt(value, zone).toLowerCase().includes(e.toLowerCase());
 
   const [, operator, raw] = op;
   const operand = raw.trim();
@@ -56,15 +56,14 @@ export function matches(value: unknown, expr: string): boolean {
   let a: number | string;
   let b: number | string;
   if (value instanceof Date) {
-    // Cells are displayed as ISO UTC, so a bare "2019-02-13T15:00" must mean
-    // 15:00 UTC too. JavaScript would otherwise read a date-time with no zone
-    // as LOCAL time, so the same text would select a different set of events
-    // depending on the analyst's machine — unacceptable in forensic output.
-    const hasZone = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(operand);
-    const t = Date.parse(hasZone || !operand.includes('T') ? operand : `${operand}Z`);
-    if (Number.isNaN(t)) return false;
-    a = value.getTime();
-    b = t;
+    // A bare "2019-02-13 15:00" means 15:00 in the zone times are shown in
+    // (UTC unless changed), never the examiner machine's local time, which is
+    // how JavaScript would read it: the same text must select the same events
+    // on every machine. Compared to the 100ns tick.
+    const t = parseTime(operand, zone);
+    if (!t) return false;
+    a = compareTimes(value, t);
+    b = 0;
   } else if (
     (typeof value === 'number' || (typeof value === 'string' && /^-?\d+(\.\d+)?$/.test(value))) &&
     !Number.isNaN(Number(operand))
@@ -74,7 +73,7 @@ export function matches(value: unknown, expr: string): boolean {
     a = Number(value);
     b = Number(operand);
   } else {
-    a = fmt(value).toLowerCase();
+    a = fmt(value, zone).toLowerCase();
     b = operand.toLowerCase();
   }
 
@@ -284,24 +283,24 @@ function glob(pattern: string): RegExp {
   return new RegExp(`^${src}$`, 'is');
 }
 
-function leafTest(value: unknown, op: Op, operand: string): boolean {
+function leafTest(value: unknown, op: Op, operand: string, zone: string): boolean {
   switch (op) {
     case 'has': {
-      if (/[*?]/.test(operand)) return glob(operand).test(fmt(value));
-      return fmt(value).toLowerCase().includes(operand.toLowerCase());
+      if (/[*?]/.test(operand)) return glob(operand).test(fmt(value, zone));
+      return fmt(value, zone).toLowerCase().includes(operand.toLowerCase());
     }
     case 'contains':
-      return fmt(value).toLowerCase().includes(operand.toLowerCase());
+      return fmt(value, zone).toLowerCase().includes(operand.toLowerCase());
     case 'startswith':
-      return fmt(value).toLowerCase().startsWith(operand.toLowerCase());
+      return fmt(value, zone).toLowerCase().startsWith(operand.toLowerCase());
     case 'endswith':
-      return fmt(value).toLowerCase().endsWith(operand.toLowerCase());
+      return fmt(value, zone).toLowerCase().endsWith(operand.toLowerCase());
     case '=':
-      return /[*?]/.test(operand) ? glob(operand).test(fmt(value)) : matches(value, `=${operand}`);
+      return /[*?]/.test(operand) ? glob(operand).test(fmt(value, zone)) : matches(value, `=${operand}`, zone);
     case '!=':
-      return !leafTest(value, '=', operand);
+      return !leafTest(value, '=', operand, zone);
     default:
-      return matches(value, `${op}${operand}`);
+      return matches(value, `${op}${operand}`, zone);
   }
 }
 
@@ -314,7 +313,7 @@ export type Predicate = (row: Row) => boolean;
  * term means that column. In the search box it is absent, and a bare term
  * means any column.
  */
-export function compileQuery(text: string, columns: Column[], defaultField?: string): Predicate {
+export function compileQuery(text: string, columns: Column[], defaultField?: string, zone = 'UTC'): Predicate {
   const trimmed = text.trim();
   if (!trimmed) return () => true;
 
@@ -339,17 +338,17 @@ export function compileQuery(text: string, columns: Column[], defaultField?: str
         if (node.field === null) {
           // No field named: the column this filter belongs to, or else any
           // column at all.
-          if (defaultField !== undefined) return leafTest(row[defaultField], node.op, node.value);
-          return keys.some((k) => leafTest(row[k], node.op, node.value));
+          if (defaultField !== undefined) return leafTest(row[defaultField], node.op, node.value, zone);
+          return keys.some((k) => leafTest(row[k], node.op, node.value, zone));
         }
         const values = fieldValues(row, node.field, index);
         if (values.length === 0 && !index.has(norm(node.field))) {
           // Not a column, and not a field this row has either, so it was never
           // a field: "http://host" is an address, not the field "http".
           const target = defaultField !== undefined ? [defaultField] : keys;
-          return target.some((k) => leafTest(row[k], 'has', node.raw));
+          return target.some((k) => leafTest(row[k], 'has', node.raw, zone));
         }
-        return values.some((v) => leafTest(v, node.op, node.value));
+        return values.some((v) => leafTest(v, node.op, node.value, zone));
       }
     }
   };

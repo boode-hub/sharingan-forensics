@@ -17,7 +17,7 @@
  *   - https://github.com/EricZimmerman/Lnk
  */
 import type { Column, Parser, Reader, Ctx, Row } from '../core/types';
-import { Cursor, guid } from '../core/binary';
+import { Cursor, guid, preciseDate } from '../core/binary';
 import { absolutePath, parseShellItem, type ShellItem } from '../core/shellitem';
 import { parsePropertyStore, propertyName } from '../core/propstore';
 
@@ -171,10 +171,12 @@ export function uuidV1Time(b: Uint8Array): Date | null {
   const hi = BigInt(hiAndVersion & 0x0fff);
   const ticks = (hi << 48n) | (mid << 32n) | low;
   if (ticks === 0n) return null;
-  // 1582-10-15 to 1970-01-01 in 100ns units.
-  const ms = Number((ticks - 122_192_928_000_000_000n) / 10_000n);
+  // 1582-10-15 to 1970-01-01 in 100ns units; floored, so a pre-1970 time keeps its ticks.
+  const rel = ticks - 122_192_928_000_000_000n;
+  const sub = ((rel % 10_000n) + 10_000n) % 10_000n;
+  const ms = Number((rel - sub) / 10_000n);
   if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return null;
-  return new Date(ms);
+  return preciseDate(ms, Number(sub));
 }
 
 /**

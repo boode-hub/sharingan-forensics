@@ -17,7 +17,7 @@
  * https://github.com/EricZimmerman/Lnk
  * https://github.com/EricZimmerman/ExtensionBlocks
  */
-import { filetime, guid, utf16Raw } from './binary';
+import { filetime, guid, iso, preciseDate, utf16Raw } from './binary';
 import { describeSheets, parsePropertyStore, propertyViewName, type PropertySheet } from './propstore';
 import { invariantDate } from './textdate';
 
@@ -246,12 +246,11 @@ function beef0026Text(b: Uint8Array, names: Names): string {
   ];
   let sheets: PropertySheet[] = [];
   let versionOffset = 0;
-  // "yyyy-MM-dd HH:mm:ss.fffffff", every 100ns tick of the FILETIME.
+  // Every 100ns tick of the FILETIME, in the one form times are written here
+  // (his is "yyyy-MM-dd HH:mm:ss.fffffff", with no zone). A zero is 1601, not blank.
   const stamp = (at: number) => {
     const ticks = view(b).getBigUint64(at, true);
-    const d = new Date(Number(ticks / 10000n) - 11644473600000);
-    const frac = String(ticks % 10000000n).padStart(7, '0');
-    return `${d.toISOString().slice(0, 19).replace('T', ' ')}.${frac}`;
+    return iso(preciseDate(Number(ticks / 10000n) - 11644473600000, Number(ticks % 10000n)));
   };
   const times: string[] = [];
   if ([0x11, 0x10, 0x12, 0x34, 0x31].includes(b[8]) && b.length >= 36) {

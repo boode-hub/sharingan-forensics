@@ -5,7 +5,14 @@
  * report at any point.
  */
 import type { Column, Row } from '../core/types';
-import { fmt, neutralizeFormula } from './format';
+import { parseIso } from '../core/binary';
+import { compareTimes, fmt, formatTime, localize, neutralizeFormula } from './format';
+
+/** An event's stored UTC time as it is shown in a zone. */
+export const showTime = (t: string, zone: string) => {
+  const d = parseIso(t);
+  return d ? formatTime(d, zone) : t;
+};
 
 export interface TimelineSource {
   /** The navigator key of the artifact: a case artifact's id, or "r<id>" in a session. */
@@ -169,7 +176,9 @@ export function snapshot(row: Row, columns: Column[]): Record<string, string> {
 export function sortEvents(events: TimelineEvent[]): TimelineEvent[] {
   return [...events].sort((a, b) => {
     if (a.time === null || b.time === null) return a.time === b.time ? a.added.localeCompare(b.added) : a.time === null ? -1 : 1;
-    return a.time.localeCompare(b.time) || a.added.localeCompare(b.added);
+    // To the 100ns tick; a time saved before seven digits were kept still orders.
+    const [ta, tb] = [parseIso(a.time), parseIso(b.time)];
+    return (ta && tb ? compareTimes(ta, tb) : a.time.localeCompare(b.time)) || a.added.localeCompare(b.added);
   });
 }
 
@@ -229,7 +238,8 @@ export interface ReportInfo {
  * timeline, and each event's recorded fields. Every piece of evidence text is
  * escaped: it is attacker-controlled and the report will be opened in a browser.
  */
-export function timelineReport(t: Timeline, info: ReportInfo, generated = new Date()): string {
+export function timelineReport(t: Timeline, info: ReportInfo, generated = new Date(), zone = 'UTC'): string {
+  const at = (s: string) => showTime(s, zone);
   const events = sortEvents(t.events);
   const count = (key: (e: TimelineEvent) => string) => {
     const m = new Map<string, number>();
@@ -237,21 +247,21 @@ export function timelineReport(t: Timeline, info: ReportInfo, generated = new Da
     return [...m].sort((a, b) => b[1] - a[1]);
   };
   const dated = events.filter((e) => e.time);
-  const span = dated.length ? `${dated[0].time} → ${dated[dated.length - 1].time}` : 'no dated events';
+  const span = dated.length ? `${at(dated[0].time ?? '')} → ${at(dated[dated.length - 1].time ?? '')}` : 'no dated events';
   let lastDay = '';
   let lastTime: string | null = null;
   const items = events
     .map((e) => {
-      const day = e.time ? e.time.slice(0, 10) : 'Undated';
+      const day = e.time ? at(e.time).slice(0, 10) : 'Undated';
       const header = day !== lastDay ? `<li class="day">${esc(day)}</li>` : '';
       lastDay = day;
       const g = e.time && lastTime ? gap(lastTime, e.time) : '';
       if (e.time) lastTime = e.time;
       const fields = Object.entries(e.data)
-        .map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`)
+        .map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(localize(v, zone))}</td></tr>`)
         .join('');
       return `${header}<li class="ev">
-  <div class="when">${esc(e.time ? e.time.replace('T', ' ').replace('Z', ' UTC') : 'Undated')}${g ? `<span class="gap">${esc(g)}</span>` : ''}</div>
+  <div class="when">${esc(e.time ? at(e.time) : 'Undated')}${g ? `<span class="gap">${esc(g)}</span>` : ''}</div>
   <div class="card"><div class="top"><span class="lane">${esc(e.lane)}</span>${e.tag ? `<span class="tag">${esc(e.tag)}</span>` : ''}</div>
   <div class="label">${esc(e.label)}</div>
   ${e.note ? `<div class="note">${esc(e.note)}</div>` : ''}
@@ -283,7 +293,8 @@ th,td{text-align:left;vertical-align:top;padding:3px 8px;border-top:1px solid va
 @media print{details{display:none}.card{break-inside:avoid}}
 </style></head><body><main>
 <h1>Investigation timeline</h1>
-<p class="meta">Generated ${esc(generated.toISOString())} by 4NSEC · ${events.length} event${events.length === 1 ? '' : 's'} · ${esc(span)}</p>
+<p class="meta">Generated ${esc(formatTime(generated, zone))} by 4NSEC · ${events.length} event${events.length === 1 ? '' : 's'} · ${esc(span)}</p>
+<p class="meta">All times are shown in ${esc(zone === 'UTC' ? 'UTC' : `${zone} (UTC offset on each time)`)}.</p>
 <dl><dt>Case</dt><dd>${esc(info.caseName || '—')}</dd><dt>Customer</dt><dd>${esc(info.customer || '—')}</dd><dt>Reference</dt><dd>${esc(info.reference || '—')}</dd><dt>Examiner</dt><dd>${esc(info.examiner || '—')}</dd>${info.notes ? `<dt>Notes</dt><dd>${esc(info.notes)}</dd>` : ''}</dl>
 <div class="sums"><div>By lane<ul>${list(count((e) => e.lane))}</ul></div><div>By tag<ul>${list(count((e) => e.tag))}</ul></div></div>
 <ol>

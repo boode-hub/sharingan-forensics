@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useContext, useMemo, useState } from 'react';
+import { iso } from '../core/binary';
 import type { Column, Row } from '../core/types';
-import { download, fmt } from './format';
+import { download, fmt, formatTime, parseTime, ZoneContext } from './format';
 import {
   gap,
   guessLane,
+  showTime,
   snapshot,
   sortEvents,
   summarise,
@@ -45,14 +47,17 @@ export function AddEventDialog({
   const [timeField, setTimeField] = useState(times[0]?.key ?? '');
   const initialTime = (key: string) => {
     const v = pending.row[key];
-    return v instanceof Date ? v.toISOString() : '';
+    return v instanceof Date ? iso(v) : '';
   };
   const [time, setTime] = useState(initialTime(times[0]?.key ?? ''));
   const [lane, setLane] = useState(() => guessLane(pending.row, timeline.lanes, lastLane));
   const [label, setLabel] = useState(() => summarise(pending.row, pending.columns));
   const [tag, setTag] = useState('');
   const [note, setNote] = useState('');
-  const timeOk = time === '' || !Number.isNaN(Date.parse(time));
+  // Typed in UTC, as the field says; an offset written with it is honoured.
+  const parsed = time ? parseTime(time, 'UTC') : null;
+  const timeOk = time === '' || parsed !== null;
+  const zone = useContext(ZoneContext);
 
   const add = () => {
     if (!timeOk || !lane.trim()) return;
@@ -60,7 +65,7 @@ export function AddEventDialog({
     const fieldTime = field ? initialTime(field.key) : '';
     onAdd({
       id: crypto.randomUUID(),
-      time: time ? new Date(time).toISOString() : null,
+      time: parsed ? iso(parsed) : null,
       // A time typed over the column's is the examiner's, not the column's.
       timeField: field && time === fieldTime ? field.label : time ? 'entered by examiner' : null,
       lane: lane.trim(),
@@ -118,6 +123,7 @@ export function AddEventDialog({
               className={timeOk ? '' : 'bad'}
             />
           </span>
+          {parsed && zone !== 'UTC' && <span className="hint">= {formatTime(parsed, zone)}</span>}
         </label>
         <label>
           Lane (host, user, or anything)
@@ -159,13 +165,15 @@ export function AddEventDialog({
 }
 
 /** Each event with whether it starts a new day and how long after the dated one before it came. */
-function withDays(events: TimelineEvent[]) {
-  const out: Array<{ e: TimelineEvent; day: string; newDay: boolean; gap: string }> = [];
+function withDays(events: TimelineEvent[], zone: string) {
+  const out: Array<{ e: TimelineEvent; day: string; clock: string; newDay: boolean; gap: string }> = [];
   let lastDay = '';
   let lastTime: string | null = null;
   for (const e of events) {
-    const day = e.time ? e.time.slice(0, 10) : 'Undated';
-    out.push({ e, day, newDay: day !== lastDay, gap: e.time && lastTime ? gap(lastTime, e.time) : '' });
+    // The day and clock in the zone shown, the clock with its offset.
+    const at = e.time ? showTime(e.time, zone) : '';
+    const day = at ? at.slice(0, 10) : 'Undated';
+    out.push({ e, day, clock: at.slice(11), newDay: day !== lastDay, gap: e.time && lastTime ? gap(lastTime, e.time) : '' });
     lastDay = day;
     if (e.time) lastTime = e.time;
   }
@@ -195,6 +203,7 @@ export function TimelineView({
   const [tagFilter, setTagFilter] = useState('');
   const [laneFilter, setLaneFilter] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
+  const zone = useContext(ZoneContext);
 
   const lanes = useMemo(() => {
     const used = new Set(timeline.events.map((e) => e.lane));
@@ -210,7 +219,7 @@ export function TimelineView({
         (!q || [e.label, e.note, e.tag, e.lane, e.source.path, ...Object.values(e.data)].some((s) => s.toLowerCase().includes(q))),
     );
   }, [timeline, query, tagFilter, laneFilter]);
-  const rows = useMemo(() => withDays(shown), [shown]);
+  const rows = useMemo(() => withDays(shown, zone), [shown, zone]);
   const visibleLanes = laneFilter ? [laneFilter] : lanes;
   const current = timeline.events.find((e) => e.id === selected) ?? null;
 
@@ -253,7 +262,7 @@ export function TimelineView({
           {shown.length} of {timeline.events.length} event{timeline.events.length === 1 ? '' : 's'}
           {persisted ? ' · saved with the case' : ' · this session only: open a case to keep it'}
         </span>
-        <button type="button" disabled={!timeline.events.length} onClick={() => download(`${base}.html`, timelineReport(timeline, report), 'text/html')}>
+        <button type="button" disabled={!timeline.events.length} onClick={() => download(`${base}.html`, timelineReport(timeline, report, new Date(), zone), 'text/html')}>
           Report
         </button>
         <button type="button" disabled={!timeline.events.length} onClick={() => download(`${base}.csv`, timelineCsv(timeline), 'text/csv')}>
@@ -278,14 +287,14 @@ export function TimelineView({
           </div>
         ) : (
           <div className="tl-scroll">
-            <div className="tl-lanes" style={{ gridTemplateColumns: `140px repeat(${visibleLanes.length}, minmax(220px, 1fr))` }}>
-              <div className="tl-head when">Time (UTC)</div>
+            <div className="tl-lanes" style={{ gridTemplateColumns: `${zone === 'UTC' ? 150 : 190}px repeat(${visibleLanes.length}, minmax(220px, 1fr))` }}>
+              <div className="tl-head when">Time ({zone})</div>
               {visibleLanes.map((l) => (
                 <div key={l} className="tl-head lane-name" title={l}>
                   {l}
                 </div>
               ))}
-              {rows.map(({ e, day, newDay, gap: g }) => {
+              {rows.map(({ e, day, clock, newDay, gap: g }) => {
                 return [
                   newDay && (
                     <div key={`d-${e.id}`} className="tl-day" style={{ gridColumn: `1 / span ${visibleLanes.length + 1}` }}>
@@ -293,7 +302,7 @@ export function TimelineView({
                     </div>
                   ),
                   <div key={`t-${e.id}`} className="tl-time">
-                    {e.time ? e.time.slice(11, 23) : '—'}
+                    {clock || '—'}
                     {g && <span className="gap">{g}</span>}
                   </div>,
                   ...visibleLanes.map((l) =>
@@ -334,10 +343,13 @@ export function TimelineView({
                 onBlur={(e) => {
                   const v = e.target.value.trim();
                   if (v === (current.time ?? '')) return;
-                  if (v && Number.isNaN(Date.parse(v))) return;
-                  update(current.id, { time: v ? new Date(v).toISOString() : null, timeField: v ? 'entered by examiner' : null });
+                  // Typed in UTC, as the field says; an offset written with it is honoured.
+                  const t = v ? parseTime(v, 'UTC') : null;
+                  if (v && !t) return;
+                  update(current.id, { time: t ? iso(t) : null, timeField: t ? 'entered by examiner' : null });
                 }}
               />
+              {current.time && zone !== 'UTC' && <span className="hint">= {showTime(current.time, zone)}</span>}
             </label>
             <label>
               Lane
@@ -383,7 +395,7 @@ export function TimelineView({
                 {Object.entries(current.data).map(([k, v]) => (
                   <tr key={k}>
                     <th>{k}</th>
-                    <td>{fmt(v)}</td>
+                    <td>{fmt(v, zone)}</td>
                   </tr>
                 ))}
               </tbody>

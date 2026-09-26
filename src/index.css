@@ -2011,3 +2011,32 @@ main[hidden] {
   border-top: 1px solid var(--border);
   border-bottom: 0;
 }
+
+/* Which zone times are shown in, always in view. */
+.zone-chip {
+  margin-right: 8px;
+  padding: 4px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font: 12px var(--mono);
+  cursor: pointer;
+}
+.zone-chip.shifted {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.setting select {
+  max-width: 170px;
+  padding: 4px 6px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+}
+.modal .hint,
+.tl-detail .hint {
+  color: var(--text-muted);
+  font: 11.5px var(--mono);
+}

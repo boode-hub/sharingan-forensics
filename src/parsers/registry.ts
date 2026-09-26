@@ -12,7 +12,7 @@
  * from unallocated cells. RECmd plugins are not attempted here.
  */
 import type { Column, Parser, Reader, Ctx, Row } from '../core/types';
-import { Cursor, filetime, magic } from '../core/binary';
+import { Cursor, filetime, iso, magic } from '../core/binary';
 import { MAX_ROWS } from '../core/registry';
 import { replayIfDirty } from './registry/translog';
 
@@ -328,7 +328,7 @@ function renderValueData(buf: Uint8Array, dataLen: number, dataTypeRaw: number, 
       if (buf.length - start < 8) return '';
       const ticks = new DataView(buf.buffer, buf.byteOffset + start, 8).getBigUint64(0, true);
       const d = filetime(ticks);
-      return d ? d.toISOString() : '';
+      return d ? iso(d) : '';
     }
     case 0x0101:
       return `0x${buf[start].toString(16).padStart(2, '0').toUpperCase()}`;

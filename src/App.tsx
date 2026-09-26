@@ -28,7 +28,8 @@ import {
   type CaseInfo,
   type Incoming,
 } from './ui/cases';
-import { bytes } from './ui/format';
+import { bytes, ZoneContext } from './ui/format';
+import { unpackTicks } from './ui/fields';
 import { baseName, dirOf, extOf, type Entry } from './ui/navigator';
 import {
   DEFAULT_DETAIL_SIZES,
@@ -47,6 +48,19 @@ import type { Column, Row } from './core/types';
 import type { ParserInfo, WorkRequest, WorkResult, WorkerReady } from './worker';
 
 let nextId = 1;
+
+// Where times are shown. Evidence is read and kept in UTC whatever is chosen.
+const HERE_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const ZONES = Intl.supportedValuesOf('timeZone').filter((z) => z !== 'UTC' && z !== HERE_ZONE);
+const isZone = (v: unknown): v is string => {
+  if (typeof v !== 'string') return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: v });
+    return true;
+  } catch {
+    return false;
+  }
+};
 let nextPane = 1;
 
 /** The accent the Phishing Email Analyzer ships with. */
@@ -101,6 +115,7 @@ export default function App() {
   const [sizes, setSizes] = useState<DetailSizes>(() => read('detailSizes', DEFAULT_DETAIL_SIZES, isSizes));
   const [builderOpen, setBuilderOpen] = useState(() => read('builderOpen', true, isFlag));
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [zone, setZone] = useState(() => read('timeZone', 'UTC', isZone));
   const [saved, setSaved] = useState<SavedFilter[]>(() => read('savedFilters', [], isSavedList));
 
   // The investigation timeline: kept with the case, or for this session only.
@@ -153,6 +168,7 @@ export default function App() {
       // A result for something no longer open (the analyst switched cases
       // while it was being read) is dropped rather than shown in the wrong case.
       if (!opened.current.has(result.id)) return;
+      if (result.rows) unpackTicks(result.rows);
       setResults((rs) => [...rs, result]);
       // The first file of a session fills an empty pane on its own.
       const ps = panesRef.current;
@@ -170,6 +186,9 @@ export default function App() {
   useEffect(() => {
     write('detailPosition', position);
   }, [position]);
+  useEffect(() => {
+    write('timeZone', zone);
+  }, [zone]);
   useEffect(() => {
     write('detailSizes', sizes);
   }, [sizes]);
@@ -570,6 +589,7 @@ export default function App() {
   const splitView = panes.length > 1;
 
   return (
+    <ZoneContext value={zone}>
     <div
       className={`app${dragging ? ' dragging' : ''}`}
       onDragOver={(e) => {
@@ -611,6 +631,14 @@ export default function App() {
           </button>
         </div>
         <span className="spacer" />
+        <button
+          type="button"
+          className={`zone-chip${zone === 'UTC' ? '' : ' shifted'}`}
+          title="Every time on screen is shown in this zone, with its offset. Evidence is kept in UTC; CSV and JSON exports are UTC. Change it in Settings."
+          onClick={() => setSettingsOpen(true)}
+        >
+          Times: {zone}
+        </button>
         <div className="settings">
           <button type="button" className="icon-btn" aria-expanded={settingsOpen} aria-label="Settings" onClick={() => setSettingsOpen((o) => !o)}>
             ⚙
@@ -641,6 +669,22 @@ export default function App() {
                   ))}
                 </div>
               </div>
+              <div className="setting">
+                <span>Show times in</span>
+                <select value={zone} onChange={(e) => setZone(e.target.value)} aria-label="Show times in">
+                  <option value="UTC">UTC (as EZ's tools)</option>
+                  {HERE_ZONE !== 'UTC' && <option value={HERE_ZONE}>This computer: {HERE_ZONE}</option>}
+                  {ZONES.map((z) => (
+                    <option key={z} value={z}>
+                      {z}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <p className="settings-note">
+                Every artifact is read and kept in UTC. The zone changes only what is shown, and each time shows its offset.
+                CSV and JSON exports stay UTC; the timeline report uses the zone shown.
+              </p>
               <p className="settings-note">Remembered in this browser only.</p>
             </div>
           )}
@@ -852,5 +896,6 @@ export default function App() {
         />
       )}
     </div>
+    </ZoneContext>
   );
 }

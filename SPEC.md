@@ -49,6 +49,12 @@ Rules for every parser:
   end and sets `.overran` rather than throwing — check it before trusting a record.
 - Timestamps are `Date | null`, never strings and never `0`. `null` means
   "not recorded", which is forensically different from the epoch.
+- Every time is UTC. `filetime()` keeps the 100ns ticks below the millisecond
+  (`subTicks`); a FILETIME converted any other way goes through `preciseDate`.
+  A time written into text (a payload field, a property value) uses `iso()`:
+  `2024-05-01T10:00:05.1234567Z`, the one text form, which the display zone
+  setting recognises and converts. Never the examiner machine's local time:
+  no `toLocale*`, no `Date.parse` of zone-less text, no SQLite `'localtime'`.
 - Every `columns[].key` must appear in the rows. Extra keys not in `columns`
   are dropped from the grid but kept in exports.
 

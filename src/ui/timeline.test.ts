@@ -47,7 +47,7 @@ describe('adding an event', () => {
 
   it('records every non-empty field by its label', () => {
     expect(snapshot(row, cols)).toEqual({
-      'Time Created': '2026-09-20T14:02:03.000Z',
+      'Time Created': '2026-09-20T14:02:03.0000000Z',
       'Event Id': '4624',
       Provider: 'Microsoft-Windows-Security-Auditing',
       Computer: 'WS-042',
@@ -94,6 +94,6 @@ describe('exports', () => {
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(html).toContain('a &amp; b');
     expect(html).toContain('row 42');
-    expect(html).toContain('Generated 2026-09-26T00:00:00.000Z');
+    expect(html).toContain('Generated 2026-09-26T00:00:00.0000000Z');
   });
 });

@@ -7,7 +7,7 @@
  *   - [MS-EVEN6]: Event Log Remoting Protocol (Section 2.2.14 BinXML)
  *   - libevtx documentation: https://github.com/libyal/libevtx/blob/main/documentation/Windows%20XML%20Event%20Log%20(EVTX).asciidoc
  */
-import { Cursor, filetime, guid, utf16, ascii } from '../../core/binary';
+import { Cursor, filetime, guid, iso, parseIso, utf16, ascii } from '../../core/binary';
 import type { EventMap } from './maps';
 
 /**
@@ -487,13 +487,13 @@ export function formatSubstitutionValue(
       const ft = dv.getBigUint64(0, true);
       const ms = Number((ft - 116_444_736_000_000_000n) / 10_000n);
       if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return '';
-      const iso = new Date(ms).toISOString();
-      return `${iso.slice(0, -1)}${String(ft % 10_000n).padStart(4, '0')}Z`;
+      const whole = new Date(ms).toISOString();
+      return `${whole.slice(0, -1)}${String(ft % 10_000n).padStart(4, '0')}Z`;
     }
     case 0x12: {
       // SysTimeType
       const st = systemTime(d);
-      return st ? st.toISOString() : '';
+      return st ? iso(st) : '';
     }
     case 0x13: // SidType
       return formatSid(d);
@@ -530,7 +530,7 @@ export function formatSubstitutionValue(
       const arr: string[] = [];
       for (let i = 0; i + 8 <= d.length; i += 8) {
         const dt = filetime(dv.getBigUint64(i, true));
-        arr.push(dt ? dt.toISOString() : '');
+        arr.push(dt ? iso(dt) : '');
       }
       return arr.join(',');
     }
@@ -539,7 +539,7 @@ export function formatSubstitutionValue(
       const arr: string[] = [];
       for (let i = 0; i + 16 <= d.length; i += 16) {
         const st = systemTime(d.subarray(i, i + 16));
-        arr.push(st ? st.toISOString() : '');
+        arr.push(st ? iso(st) : '');
       }
       return arr.join(',');
     }
@@ -1213,10 +1213,8 @@ export function decodeRecordBinXml(
   // EvtxECmd reports, and on a copied or re-written log the two can differ.
   let timeCreated: Date | null = null;
   const tcMatch = fullXml.match(/<TimeCreated[^>]*SystemTime="([^"]+)"/i);
-  if (tcMatch) {
-    const t = Date.parse(tcMatch[1].endsWith('Z') ? tcMatch[1] : `${tcMatch[1]}Z`);
-    if (Number.isFinite(t)) timeCreated = new Date(t);
-  }
+  // All seven digits of SystemTime, as EvtxECmd reports them.
+  if (tcMatch) timeCreated = parseIso(tcMatch[1]);
 
   // Keywords is a System field EvtxECmd reports; it is how an analyst spots
   // audit success versus failure without reading the payload.

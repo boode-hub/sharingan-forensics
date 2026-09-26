@@ -10,7 +10,7 @@
  * sheet that does not parse, or on a key that repeats, this keeps what it
  * read and goes on.
  */
-import { guid } from './binary';
+import { guid, iso, preciseDate } from './binary';
 import { PROPERTY_KEYS } from './propkeys';
 
 export interface PropertySheet {
@@ -42,13 +42,14 @@ function single(v: number): string {
   return String(v);
 }
 
-/** DateTime.FromFileTimeUtc(...).ToString(InvariantCulture): "MM/dd/yyyy HH:mm:ss". */
+/**
+ * DateTime.FromFileTimeUtc, written as every time here is (ISO 8601, UTC, seven
+ * digits) rather than his InvariantCulture "MM/dd/yyyy HH:mm:ss", which carries
+ * no zone and would read as local time beside the rest.
+ */
 function filetimeText(ticks: bigint): string {
-  const ms = Number(ticks / 10000n) - 11644473600000;
-  const d = new Date(ms);
-  if (!Number.isFinite(ms) || Number.isNaN(d.getTime())) return '';
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${p(d.getUTCMonth() + 1)}/${p(d.getUTCDate())}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+  if (ticks < 0n) return '';
+  return iso(preciseDate(Number(ticks / 10000n) - 11644473600000, Number(ticks % 10000n)));
 }
 
 /** Splits a list of size-prefixed records, stopping at a zero or implausible size. */

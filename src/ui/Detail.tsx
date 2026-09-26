@@ -1,5 +1,6 @@
 import type { Column, Row } from '../core/types';
-import { fmt } from './format';
+import { useContext } from 'react';
+import { fmt, localize, ZoneContext } from './format';
 import { pretty } from './pretty';
 import type { DetailPosition } from './storage';
 
@@ -22,6 +23,7 @@ export function Detail({
   size: number;
   onClose: () => void;
 }) {
+  const zone = useContext(ZoneContext);
   return (
     <section
       className={`detail ${position}`}
@@ -45,13 +47,13 @@ export function Detail({
               <tr key={c.key} className="structured-row">
                 <td colSpan={2}>
                   <div className="structured-label">{c.label}</div>
-                  <pre className="structured">{structured}</pre>
+                  <pre className="structured">{localize(structured, zone)}</pre>
                 </td>
               </tr>
             ) : (
               <tr key={c.key}>
                 <th>{c.label}</th>
-                <td>{fmt(row[c.key])}</td>
+                <td>{fmt(row[c.key], zone)}</td>
               </tr>
             );
           })}

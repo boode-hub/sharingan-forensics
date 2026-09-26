@@ -4,7 +4,7 @@ import { bufReader } from '../core/reader';
 import { detect, run } from '../core/registry';
 import type { Row } from '../core/types';
 import { tablesFromRows } from '../ui/fields';
-import { sqliteDb } from './sqlite';
+import { openSqlite, sqliteDb, utcQuery } from './sqlite';
 import './index';
 
 // fixtures/sqlite/CarsDB.db is his SQLMap test database (MIT), which his
@@ -71,5 +71,37 @@ describe('SQLite (SQLECmd)', () => {
     wal[40] ^= 0xff; // inside the first frame's header: its checksum no longer holds
     const damaged = await run(sqliteDb, file('notes.db'), undefined, [bufReader(wal, 'notes.db-wal')]);
     expect(damaged.rows.map((r) => r.body)).toEqual(['first', 'second']);
+  });
+});
+
+describe('SQLite times are UTC wherever it runs', () => {
+  const edge = "datetime(collections.date_created/1000, 'unixepoch', 'utc') AS Created";
+  const media = "datetime( playback.last_updated_time_s + ( strftime( '%s', '1601-01-01' ) ), 'unixepoch', 'localtime' ) AS LastUpdated";
+
+  it("drops his 'localtime' and 'utc' and marks an epoch's datetime() as UTC", () => {
+    expect(utcQuery(edge)).toBe("(datetime(collections.date_created/1000, 'unixepoch') || 'Z') AS Created");
+    expect(utcQuery(media)).toBe("(datetime( playback.last_updated_time_s + ( strftime( '%s', '1601-01-01' ) ), 'unixepoch' ) || 'Z') AS LastUpdated");
+  });
+
+  it('leaves stored text, quoted names and comments as they are', () => {
+    expect(utcQuery('select datetime(julianday(Started)) as "Transfer Started"')).toBe('select datetime(julianday(Started)) as "Transfer Started"');
+    expect(utcQuery("select 'datetime(0, ''unixepoch'')' -- don't\n, x")).toBe("select 'datetime(0, ''unixepoch'')' -- don't\n, x");
+    expect(utcQuery("select mydatetime(0, 'unixepoch')")).toBe("select mydatetime(0, 'unixepoch')");
+  });
+
+  it('gives the same instant as a date, whatever the machine zone', async () => {
+    const db = await openSqlite(file('CarsDB.db'), { warn: () => {} });
+    const q = "select datetime(1714557605, 'unixepoch', 'localtime') as t, datetime(1714557605, 'unixepoch', 'utc') as u";
+    const first = (sql: string) => {
+      const st = db!.prepare(sql);
+      st.step();
+      const row = st.get(null);
+      st.free();
+      return row;
+    };
+    // Unchanged, SQLite moves the time by the examiner machine's offset (either way).
+    if (new Date(1714557605000).getTimezoneOffset() !== 0) expect(first(q)[0]).not.toBe('2024-05-01 10:00:05');
+    expect(first(utcQuery(q))).toEqual(['2024-05-01 10:00:05Z', '2024-05-01 10:00:05Z']);
+    db!.close();
   });
 });

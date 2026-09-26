@@ -14,6 +14,7 @@
  *   cases/<caseId>/files/<id>        each artifact's bytes, byte for byte
  *   cases/<caseId>/timeline.json     the investigation timeline
  */
+import { iso, parseIso } from '../core/binary';
 import { EMPTY_TIMELINE, isTimeline, type Timeline } from './timeline';
 
 export interface CaseInfo {
@@ -198,8 +199,15 @@ export async function deleteCase(id: string): Promise<CaseInfo[]> {
 /** The case's investigation timeline, kept beside its artifacts. */
 export async function loadTimeline(caseId: string): Promise<Timeline> {
   const dir = await (await casesDir()).getDirectoryHandle(caseId, { create: true });
-  return readJson(dir, 'timeline.json', isTimeline, EMPTY_TIMELINE);
+  const t = await readJson(dir, 'timeline.json', isTimeline, EMPTY_TIMELINE);
+  // Times saved before seven digits were kept, in the one form used now.
+  return { ...t, events: t.events.map((e) => ({ ...e, time: e.time === null ? null : (tidy(e.time) ?? e.time) })) };
 }
+
+const tidy = (s: string) => {
+  const d = parseIso(s);
+  return d ? iso(d) : null;
+};
 
 export async function saveTimeline(caseId: string, t: Timeline): Promise<void> {
   const dir = await (await casesDir()).getDirectoryHandle(caseId, { create: true });

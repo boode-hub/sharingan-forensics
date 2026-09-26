@@ -168,3 +168,27 @@ describe('mistakes', () => {
     expect(keep('   ')).toEqual([0, 1, 2, 3]);
   });
 });
+
+describe('filtering on time', () => {
+  const zoned = (q: string, zone: string) => {
+    const test = compileQuery(q, columns, undefined, zone);
+    return rows.flatMap((r, i) => (test(r) ? [i] : []));
+  };
+
+  it('reads a time without a zone as UTC, whatever the machine running it', () => {
+    // With a space instead of T, JavaScript alone would take this as local time.
+    expect(keep('TimeCreated>="2019-02-13 16:00"')).toEqual([1, 2, 3]);
+    expect(keep('TimeCreated<"2019-02-13 16:00"')).toEqual([0]);
+  });
+
+  it('reads it in the zone times are shown in, and honours a written offset', () => {
+    // 11:00 in New York on 13 February is 16:00 UTC.
+    expect(zoned('TimeCreated>=2019-02-13T11:00', 'America/New_York')).toEqual([1, 2, 3]);
+    expect(zoned('TimeCreated>=2019-02-13T16:00Z', 'America/New_York')).toEqual([1, 2, 3]);
+  });
+
+  it('matches text as it is shown', () => {
+    expect(zoned('TimeCreated contains 2019-02-13T10:00', 'America/New_York')).toEqual([0]);
+    expect(keep('TimeCreated contains 2019-02-13T15:00:00.0000000Z')).toEqual([0]);
+  });
+});

@@ -7,6 +7,7 @@
  * Sigma engine both ask for fields by name, so both come through here, and a
  * name resolves to a column first and to the event's own fields second.
  */
+import type { PreciseDate } from '../core/binary';
 import type { Column, Row, Table } from '../core/types';
 import { parseXml, type XNode } from '../parsers/evtx/xpath';
 
@@ -132,8 +133,43 @@ export function tablesFromRows(rows: Row[], sample = 200): Table[] {
     if (t.seen++ >= sample) continue;
     for (const c of t.table.columns) {
       const v = r[c.key];
-      if (c.type === undefined && v !== null && v !== undefined && v !== '') c.type = typeof v === 'number' ? 'num' : 'str';
+      if (c.type === undefined && v !== null && v !== undefined && v !== '') c.type = v instanceof Date ? 'date' : typeof v === 'number' ? 'num' : 'str';
     }
   }
   return [...tables.values()].map((t) => t.table);
 }
+
+/**
+ * Where a row's sub-millisecond ticks travel from the worker: a message keeps
+ * a Date's time and drops anything added to it, so they go beside it, keyed
+ * by column, on the rows that have any.
+ */
+export const TICKS = '\u0000ticks';
+
+export function packTicks(rows: Row[], keys: string[]): void {
+  if (!keys.length) return;
+  for (const r of rows) {
+    let t: Record<string, number> | undefined;
+    for (const k of keys) {
+      const sub = (r[k] as PreciseDate | undefined)?.sub;
+      if (sub) (t ??= {})[k] = sub;
+    }
+    if (t) r[TICKS] = t;
+  }
+}
+
+export function unpackTicks(rows: Row[]): void {
+  for (const r of rows) {
+    const t = r[TICKS] as Record<string, number> | undefined;
+    if (!t) continue;
+    for (const [k, sub] of Object.entries(t)) {
+      const d = r[k];
+      if (d instanceof Date) (d as PreciseDate).sub = sub;
+    }
+  }
+}
+
+/** Every date column of a result, on its own or in any of its tables. */
+export const dateKeys = (columns: Column[], tables?: Table[]) => [
+  ...new Set([...columns, ...(tables ?? []).flatMap((t) => t.columns)].filter((c) => c.type === 'date').map((c) => c.key)),
+];

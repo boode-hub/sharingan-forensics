@@ -22,6 +22,9 @@ This file is the short version of what gets a change rejected in review.
   on the whole input.
 - **Timestamps are `Date | null`.** Never a string, never `0`, never `new
   Date(0)` as a stand-in for missing. Use the helpers in `src/core/binary.ts`.
+- **Every time is UTC, to the 100ns tick.** `filetime()`/`preciseDate()` keep
+  the ticks; text times use `iso()`. Nothing may produce the examiner machine's
+  local time. The display zone is a UI setting only.
 
 ## Before you say you are done
 

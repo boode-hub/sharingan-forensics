@@ -9,7 +9,41 @@ const FILETIME_EPOCH_MS = 11644473600000;
  */
 export function filetime(ticks: bigint): Date | null {
   if (ticks === 0n || ticks === 0xffffffffffffffffn) return null;
-  return new Date(Number(ticks / 10000n) - FILETIME_EPOCH_MS);
+  return preciseDate(Number(ticks / 10000n) - FILETIME_EPOCH_MS, Number(ticks % 10000n));
+}
+
+/**
+ * A Date that also keeps the 100ns ticks below its millisecond (0-9999). A
+ * JavaScript Date holds whole milliseconds; FILETIME and EZ's tools have seven
+ * fractional digits, and a timestomped $MFT entry shows in the last four.
+ */
+export type PreciseDate = Date & { sub?: number };
+
+/** The 100ns ticks below a Date's millisecond; 0 for a time kept no finer. */
+export const subTicks = (d: Date): number => (d as PreciseDate).sub ?? 0;
+
+export function preciseDate(ms: number, sub: number): Date {
+  const d: PreciseDate = new Date(ms);
+  if (sub) d.sub = sub;
+  return d;
+}
+
+/**
+ * The one text form every time here is written in: ISO 8601, UTC, seven
+ * fractional digits, e.g. 2024-05-01T10:00:05.1234567Z.
+ */
+export function iso(d: Date): string {
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.toISOString().slice(0, -1)}${String(subTicks(d)).padStart(4, '0')}Z`;
+}
+
+/** Reads that form back (1-7 fractional digits, Z optional), keeping every digit. */
+export function parseIso(s: string): Date | null {
+  const m = /^([+-]\d{6}|\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,7}))?Z?$/.exec(s.trim());
+  if (!m) return null;
+  const f = (m[7] ?? '').padEnd(7, '0');
+  const ms = Date.parse(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}.${f.slice(0, 3)}Z`);
+  return Number.isNaN(ms) ? null : preciseDate(ms, Number(f.slice(3)));
 }
 
 /** Unix seconds -> Date. 0 is treated as unset. */

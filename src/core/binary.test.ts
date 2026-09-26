@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Cursor, ascii, dosDateTime, filetime, guid, magic, utf16 } from './binary';
+import { Cursor, ascii, dosDateTime, filetime, guid, iso, magic, parseIso, subTicks, utf16 } from './binary';
 
 describe('filetime', () => {
   it('converts a known tick count', () => {
@@ -9,6 +9,20 @@ describe('filetime', () => {
   it('treats 0 and max as unset rather than year 1601', () => {
     expect(filetime(0n)).toBeNull();
     expect(filetime(0xffffffffffffffffn)).toBeNull();
+  });
+  it('keeps every 100ns tick, as EZ prints them', () => {
+    const d = filetime(132223104001234567n) as Date;
+    expect(d.toISOString()).toBe('2020-01-01T00:00:00.123Z');
+    expect(subTicks(d)).toBe(4567);
+    expect(iso(d)).toBe('2020-01-01T00:00:00.1234567Z');
+    // Before 1970 the ticks still count up from the millisecond below.
+    expect(iso(filetime(1n) as Date)).toBe('1601-01-01T00:00:00.0000001Z');
+  });
+  it('reads its own text form back, digit for digit', () => {
+    expect(iso(parseIso('2026-04-23T14:35:25.1770772Z') as Date)).toBe('2026-04-23T14:35:25.1770772Z');
+    expect(iso(parseIso('2026-04-23T14:35:25.5') as Date)).toBe('2026-04-23T14:35:25.5000000Z');
+    expect(parseIso('2026-04-23 14:35:25')).toBeNull();
+    expect(parseIso('23/04/2026')).toBeNull();
   });
   it('surfaces an implausible-but-valid tick count instead of hiding it', () => {
     expect(filetime(0x7fffffffffffffffn)?.getUTCFullYear()).toBe(30828);

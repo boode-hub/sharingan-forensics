@@ -14,6 +14,10 @@
  *    --hunt does, rather than left unprocessed.
  *  - A database no map recognises has each of its tables listed whole,
  *    rather than only their names in his log.
+ *  - Times are UTC, as everywhere else here. His maps ask SQLite for
+ *    'localtime' (the examiner machine's zone) in some queries and 'utc' in
+ *    others; both modifiers are dropped (see utcQuery), and an epoch the query
+ *    converts comes back as a date rather than zone-less text.
  *
  * A write-ahead log opened with the database (its "-wal" file) is applied as
  * SQLite applies it on open: every frame up to the last valid commit, checked
@@ -109,6 +113,83 @@ function value(v: SqlValue): unknown {
 
 const quoteIdent = (s: string) => `"${s.replaceAll('"', '""')}"`;
 
+/**
+ * Index just past a quoted run ('text', "name", `name`, [name]) or a comment
+ * starting at i, or i itself when neither starts there: an apostrophe in
+ * "-- don't" must not open a string.
+ */
+function skip(sql: string, i: number): number {
+  const c = sql[i];
+  if (c === '-' && sql[i + 1] === '-') {
+    const end = sql.indexOf('\n', i);
+    return end < 0 ? sql.length : end;
+  }
+  if (c === '/' && sql[i + 1] === '*') {
+    const end = sql.indexOf('*/', i + 2);
+    return end < 0 ? sql.length : end + 2;
+  }
+  if (c !== "'" && c !== '"' && c !== '`' && c !== '[') return i;
+  const close = c === '[' ? ']' : c;
+  for (let j = i + 1; j < sql.length; j++) {
+    if (sql[j] !== close) continue;
+    if (sql[j + 1] === close && close !== ']') j++;
+    else return j + 1;
+  }
+  return sql.length;
+}
+
+/**
+ * A map query made to give UTC wherever it runs. 'localtime' shifts a time
+ * into the examiner machine's zone, and 'utc' shifts it the other way on the
+ * belief that it was local: after 'unixepoch' both only move a UTC value, so
+ * both go. A datetime() of an epoch is then UTC, and is marked with a Z so it
+ * is read back as a date; one of stored text (datetime(julianday(x))) is left
+ * as the text was, since nothing says which zone it was written in.
+ */
+export function utcQuery(sql: string): string {
+  const s = sql.replace(/,\s*'(localtime|utc)'/gi, '');
+  let out = '';
+  let i = 0;
+  while (i < s.length) {
+    const end = skip(s, i);
+    if (end > i) {
+      out += s.slice(i, end);
+      i = end;
+      continue;
+    }
+    const call = /^datetime\s*\(/i.exec(s.slice(i, i + 20));
+    if (call && !/[\w$]/.test(s[i - 1] ?? '')) {
+      // The call's closing bracket, stepping over quoted text and comments.
+      let depth = 0;
+      let j = i + call[0].length - 1;
+      while (j < s.length) {
+        const past = skip(s, j);
+        if (past > j) {
+          j = past;
+          continue;
+        }
+        if (s[j] === '(') depth++;
+        else if (s[j] === ')' && --depth === 0) break;
+        j++;
+      }
+      const text = s.slice(i, j + 1);
+      out += /'unixepoch'/i.test(text) ? `(${text} || 'Z')` : text;
+      i = j + 1;
+      continue;
+    }
+    out += s[i];
+    i++;
+  }
+  return out;
+}
+
+/** datetime()'s "YYYY-MM-DD HH:MM:SS" with utcQuery's Z, as a date. */
+const utcText = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?)Z$/;
+const asUtc = (v: unknown): unknown => {
+  const m = typeof v === 'string' ? utcText.exec(v) : null;
+  return m ? new Date(`${m[1]}T${m[2]}Z`) : v;
+};
+
 export const isSqlite = (head: Uint8Array) => magic(head, 'SQLite format 3\0', 0);
 
 /**
@@ -163,7 +244,7 @@ export const sqliteDb: Parser = {
           const row: Row = {};
           // Blob columns a map names are saved to files by his tool and left out of its CSV.
           names.forEach((n, i) => {
-            if (!(drop.has(n.toLowerCase()) && vals[i] instanceof Uint8Array)) row[n] = value(vals[i]);
+            if (!(drop.has(n.toLowerCase()) && vals[i] instanceof Uint8Array)) row[n] = asUtc(value(vals[i]));
           });
           row.SourceFile = source;
           row.table = table;
@@ -190,7 +271,7 @@ export const sqliteDb: Parser = {
         for (const q of map.queries) {
           if (ctx.signal?.aborted) return;
           try {
-            yield* rows(q.query, `${map.csvPrefix}_${q.baseFileName}`, new Set(q.blobColumns.map((c) => c.toLowerCase())));
+            yield* rows(utcQuery(q.query), `${map.csvPrefix}_${q.baseFileName}`, new Set(q.blobColumns.map((c) => c.toLowerCase())));
           } catch (e) {
             ctx.warn(0, `${map.description}, query "${q.name}": ${(e as Error).message}`);
           }

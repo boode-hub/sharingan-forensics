@@ -1,7 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { Column, Row } from '../core/types';
-import { fmt } from './format';
+import { compareTimes, fmt, ZoneContext } from './format';
 import { compileQuery, QueryError, type Predicate } from './query';
 
 const ROW_H = 26;
@@ -10,9 +10,10 @@ const IDX_W = 62;
 
 /** Fixed width per column type. Predictable beats clever, and it lets the row
  *  be wider than the viewport so a 14-column table scrolls instead of crushing. */
-function widthOf(c: Column): number {
+function widthOf(c: Column, zone: string): number {
   if (c.type === 'num') return 120;
-  if (c.type === 'date') return 195;
+  // Seven fractional digits and the zone: "Z" in UTC, "+03:00" elsewhere.
+  if (c.type === 'date') return zone === 'UTC' ? 222 : 258;
   if (c.type === 'bool') return 90;
   return 230;
 }
@@ -22,7 +23,7 @@ function compare(a: unknown, b: unknown): number {
   const an = a === null || a === undefined;
   const bn = b === null || b === undefined;
   if (an || bn) return an && bn ? 0 : an ? 1 : -1;
-  if (a instanceof Date && b instanceof Date) return a.getTime() - b.getTime();
+  if (a instanceof Date && b instanceof Date) return compareTimes(a, b);
   if (typeof a === 'number' && typeof b === 'number') return a - b;
   if (typeof a === 'bigint' && typeof b === 'bigint') return a < b ? -1 : a > b ? 1 : 0;
   return fmt(a).localeCompare(fmt(b), undefined, { numeric: true });
@@ -32,10 +33,11 @@ function compare(a: unknown, b: unknown): number {
 function compile(
   text: string,
   columns: Column[],
-  defaultField?: string,
+  defaultField: string | undefined,
+  zone: string,
 ): { test: Predicate; error: string | null } {
   try {
-    return { test: compileQuery(text, columns, defaultField), error: null };
+    return { test: compileQuery(text, columns, defaultField, zone), error: null };
   } catch (e) {
     // A filter that cannot be read matches nothing, and says why. Showing every
     // row instead would present an unfiltered table as if it were the answer.
@@ -102,10 +104,11 @@ export function Grid({
     [colFilters],
   );
 
-  const global = useMemo(() => compile(filter, columns), [filter, columns]);
+  const zone = useContext(ZoneContext);
+  const global = useMemo(() => compile(filter, columns, undefined, zone), [filter, columns, zone]);
   const perColumn = useMemo(
-    () => activeCols.map(([key, expr]) => ({ key, ...compile(expr, columns, key) })),
-    [activeCols, columns],
+    () => activeCols.map(([key, expr]) => ({ key, ...compile(expr, columns, key, zone) })),
+    [activeCols, columns, zone],
   );
   const errors = [
     global.error ? `Search: ${global.error}` : null,
@@ -161,7 +164,7 @@ export function Grid({
   const toggleSort = (key: string) =>
     setSort((s) => (s?.key !== key ? { key, dir: 1 } : s.dir === 1 ? { key, dir: -1 } : null));
 
-  const totalW = IDX_W + visible.reduce((n, c) => n + widthOf(c), 0);
+  const totalW = IDX_W + visible.reduce((n, c) => n + widthOf(c, zone), 0);
   const filtered = activeCols.length > 0 || filter.trim().length > 0 || !!extra;
 
   return (
@@ -230,7 +233,7 @@ export function Grid({
                 type="button"
                 key={c.key}
                 className="cell th"
-                style={{ width: widthOf(c) }}
+                style={{ width: widthOf(c, zone) }}
                 onClick={() => toggleSort(c.key)}
                 title={`Sort by ${c.label}`}
               >
@@ -245,7 +248,7 @@ export function Grid({
           <div className="grid-filters" style={{ top: HEAD_H }}>
             <div className="cell idx" style={{ width: IDX_W }} />
             {visible.map((c) => (
-              <div className="cell" key={c.key} style={{ width: widthOf(c) }}>
+              <div className="cell" key={c.key} style={{ width: widthOf(c, zone) }}>
                 <input
                   value={colFilters[c.key] ?? ''}
                   aria-label={`Filter ${c.label}`}
@@ -285,10 +288,10 @@ export function Grid({
                     <div
                       key={c.key}
                       className={`cell${c.type === 'num' ? ' num' : ''}`}
-                      style={{ width: widthOf(c) }}
-                      title={fmt(r[c.key])}
+                      style={{ width: widthOf(c, zone) }}
+                      title={fmt(r[c.key], zone)}
                     >
-                      {fmt(r[c.key])}
+                      {fmt(r[c.key], zone)}
                     </div>
                   ))}
                 </div>

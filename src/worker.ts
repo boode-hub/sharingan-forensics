@@ -3,7 +3,7 @@ import { blobReader } from './core/reader';
 import { byId, detect, parsers, run } from './core/registry';
 import type { Column, Table } from './core/types';
 import './parsers';
-import { tablesFromRows } from './ui/fields';
+import { dateKeys, packTicks, tablesFromRows } from './ui/fields';
 
 export interface WorkRequest {
   id: number;
@@ -92,6 +92,9 @@ self.onmessage = async (e: MessageEvent<WorkRequest>) => {
     undefined,
     siblings?.map((f) => blobReader(f, f.name)),
   );
+  // A parser that cannot know its tables until it runs names them on its rows.
+  const tables = parser.tables ?? (outcome.rows.some((r) => typeof r.table === 'string') ? tablesFromRows(outcome.rows) : undefined);
+  packTicks(outcome.rows, dateKeys(parser.columns, tables));
   self.postMessage({
     ...base,
     parser: {
@@ -99,8 +102,7 @@ self.onmessage = async (e: MessageEvent<WorkRequest>) => {
       name: parser.name,
       ezTool: parser.ezTool,
       columns: parser.columns,
-      // A parser that cannot know its tables until it runs names them on its rows.
-      tables: parser.tables ?? (outcome.rows.some((r) => typeof r.table === 'string') ? tablesFromRows(outcome.rows) : undefined),
+      tables,
     },
     rows: outcome.rows,
     warnings: outcome.warnings,

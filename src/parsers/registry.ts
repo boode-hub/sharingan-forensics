@@ -243,6 +243,24 @@ export async function readCellRaw(reader: Reader, rel: number): Promise<Uint8Arr
   return reader.bytes(abs, size);
 }
 
+/**
+ * The data block of a free vk cell, with his VkCellRecord safety net: a
+ * stale offset often lands on a "size" that is really other data, so a block
+ * claiming over 100 times the value's length is read as the value rounded up
+ * to 8 bytes plus 32, and one exactly the value's length gets 4 more.
+ */
+async function readFreeData(reader: Reader, rel: number, dataLen: number): Promise<Uint8Array | null> {
+  const abs = rel + 4096;
+  if (abs < 0 || abs + 4 > reader.size) return null;
+  const sizeBuf = await reader.bytes(abs, 4);
+  if (sizeBuf.length < 4) return null;
+  let size = Math.abs(new DataView(sizeBuf.buffer, sizeBuf.byteOffset, 4).getInt32(0, true));
+  if (size > dataLen * 100) size = Math.ceil(dataLen / 8) * 8 + 32;
+  if (size === dataLen) size += 4;
+  if (size < 4) return null;
+  return reader.bytes(abs, Math.min(size, reader.size - abs));
+}
+
 export function utf16Text(buf: Uint8Array): string {
   let s = '';
   for (let i = 0; i + 1 < buf.length; i += 2) {
@@ -551,11 +569,17 @@ export const registry: Parser = {
     const capped = { hit: false };
     const common = { hiveType, sourceFile: reader.name };
 
-    async function* emitKey(cell: CellRec, parentPath: string): AsyncGenerator<Row> {
-      if (ctx.signal?.aborted) return;
+    /**
+     * A key's rows, and the subkeys to visit after it. The tree is walked
+     * with an explicit stack rather than recursive generators: a row yielded
+     * through a recursive generator is passed up through every level above
+     * it, which on a deep hive like SOFTWARE costs more than the parsing.
+     */
+    async function emitKey(cell: CellRec, parentPath: string, out: Row[]): Promise<{ children: CellRec[]; keyPath: string } | null> {
+      if (ctx.signal?.aborted) return null;
       if (visited.has(cell.rel)) {
         ctx.warn(cell.rel, `cycle detected at key cell 0x${cell.rel.toString(16)} — stopping descent`);
-        return;
+        return null;
       }
       visited.add(cell.rel);
 
@@ -564,7 +588,7 @@ export const registry: Parser = {
           capped.hit = true;
           ctx.warn(0, `row cap of ${MAX_ROWS.toLocaleString()} reached — results are partial`);
         }
-        return;
+        return null;
       }
 
       const buf = cell.buf;
@@ -626,10 +650,10 @@ export const registry: Parser = {
             capped.hit = true;
             ctx.warn(0, `row cap of ${MAX_ROWS.toLocaleString()} reached — results are partial`);
           }
-          return;
+          return null;
         }
         rows++;
-        yield {
+        out.push({
           ...common,
           keyPath,
           valueName: null,
@@ -639,7 +663,7 @@ export const registry: Parser = {
           isDeleted: false,
           lastWritten: lastWrite,
           offset: rowOffset,
-        };
+        });
       } else {
         for (const v of values) {
           if (rows >= MAX_ROWS) {
@@ -647,25 +671,25 @@ export const registry: Parser = {
               capped.hit = true;
               ctx.warn(0, `row cap of ${MAX_ROWS.toLocaleString()} reached — results are partial`);
             }
-            return;
+            return null;
           }
           rows++;
-          yield { ...common, keyPath, isDeleted: false, lastWritten: lastWrite, offset: rowOffset, ...v };
+          out.push({ ...common, keyPath, isDeleted: false, lastWritten: lastWrite, offset: rowOffset, ...v });
         }
       }
 
       // Subkeys: follow the stable subkey list (lf/lh/ri/li).
+      const children: CellRec[] = [];
       if (subkeyCount > 0 && subkeyListRel > 0 && subkeyListRel !== 0xffffffff) {
         const list = lists.get(subkeyListRel);
-        if (!list) {
-          ctx.warn(subkeyListRel, `subkey list missing at 0x${subkeyListRel.toString(16)}`);
-          return;
-        }
-        yield* walkSubkeyList(list, keyPath);
+        if (!list) ctx.warn(subkeyListRel, `subkey list missing at 0x${subkeyListRel.toString(16)}`);
+        else subkeysOf(list, children);
       }
+      return { children, keyPath };
     }
 
-    async function* walkSubkeyList(list: CellRec, parentPath: string): AsyncGenerator<Row> {
+    /** The nk cells a subkey list names, in order; an ri list is a list of lists. */
+    function subkeysOf(list: CellRec, out: CellRec[], depth = 0): void {
       const sig = cellSig(list.buf);
       const n = new DataView(list.buf.buffer, list.buf.byteOffset + 6, 2).getUint16(0, true);
       if (sig === LF || sig === LH) {
@@ -678,7 +702,7 @@ export const registry: Parser = {
             ctx.warn(rel, `subkey cell missing at 0x${rel.toString(16)}`);
             continue;
           }
-          yield* emitKey(nk, parentPath);
+          out.push(nk);
         }
       } else if (sig === LI) {
         for (let i = 0; i < n; i++) {
@@ -690,11 +714,11 @@ export const registry: Parser = {
             ctx.warn(rel, `subkey cell missing at 0x${rel.toString(16)}`);
             continue;
           }
-          yield* emitKey(nk, parentPath);
+          out.push(nk);
         }
       } else if (sig === RI) {
-        // entries point to sub-lists (li or lh/lf).
-        for (let i = 0; i < n; i++) {
+        // entries point to sub-lists (li or lh/lf); an ri inside an ri would loop, so depth is bounded.
+        for (let i = 0; i < n && depth < 8; i++) {
           if (i * 4 + 4 > list.buf.length - 8) break;
           const rel = new DataView(list.buf.buffer, list.buf.byteOffset + 8 + i * 4, 4).getUint32(0, true);
           const sub = lists.get(rel);
@@ -702,14 +726,24 @@ export const registry: Parser = {
             ctx.warn(rel, `ri sub-list missing at 0x${rel.toString(16)}`);
             continue;
           }
-          yield* walkSubkeyList(sub, parentPath);
+          subkeysOf(sub, out, depth + 1);
         }
       } else {
         ctx.warn(list.rel, `unknown subkey list type at 0x${list.rel.toString(16)}`);
       }
     }
 
-    yield* emitKey(rootCell, '');
+    // Depth first, children in list order: the order his tree shows.
+    const stack: Array<{ cell: CellRec; parentPath: string }> = [{ cell: rootCell, parentPath: '' }];
+    const batch: Row[] = [];
+    while (stack.length > 0) {
+      const { cell, parentPath } = stack.pop() as { cell: CellRec; parentPath: string };
+      const got = await emitKey(cell, parentPath, batch);
+      for (const r of batch) yield r;
+      batch.length = 0;
+      if (!got) continue;
+      for (let i = got.children.length - 1; i >= 0; i--) stack.push({ cell: got.children[i], parentPath: got.keyPath });
+    }
 
     if (capped.hit) return;
 
@@ -943,7 +977,7 @@ async function decodeValue(reader: Reader, vk: CellRec, minor: number, allowFree
     if (isFree(buf) && !allowFree) {
       return null;
     }
-    const cell = await readCellRaw(reader, offsetToData);
+    const cell = isFree(buf) ? await readFreeData(reader, offsetToData, dataLen) : await readCellRaw(reader, offsetToData);
     if (!cell) {
       return null;
     }

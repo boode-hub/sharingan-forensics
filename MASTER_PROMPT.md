@@ -111,7 +111,11 @@ same columns in the same order, same values rendered the same way.
 UI: 4NSEC wordmark (S glitches to Z), condition builder (AND/OR/NOT/brackets
 writing into the search box), filter language, Sigma panel, saved filters,
 row details bottom/left/right with a draggable splitter, wrapped values, theme
-colour, per-table tabs, CSV/JSON export.
+colour, per-table tabs, CSV/JSON export. Cases in OPFS with cancellable
+upload, artifact navigator (Ctrl+K, filter syntax, categories), split panes.
+Investigation timeline (`src/ui/timeline.ts`, `TimelineView.tsx`): right-click
+a row → add to a lane, saved per case, click back to the source row, HTML /
+CSV / JSON report.
 
 ## Next, in order
 

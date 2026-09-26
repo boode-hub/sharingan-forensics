@@ -53,6 +53,9 @@ export function Grid({
   extraLabel,
   partial,
   onSelect,
+  onContext,
+  focus,
+  marked,
 }: {
   columns: Column[];
   rows: Row[];
@@ -68,6 +71,12 @@ export function Grid({
   /** The parser stopped early, so these rows are not the whole artifact. */
   partial?: boolean;
   onSelect: (r: Row) => void;
+  /** A right-click on a row, with where it happened. */
+  onContext?: (r: Row, x: number, y: number) => void;
+  /** A row to scroll to and select, such as one a timeline event came from. */
+  focus?: Row | null;
+  /** Rows to mark, such as those already on the timeline. */
+  marked?: Set<Row>;
 }) {
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 } | null>(null);
   const [active, setActive] = useState(-1);
@@ -128,6 +137,26 @@ export function Grid({
     // reports the real row count.
     initialRect: { width: 1200, height: 800 },
   });
+
+  // Bring a row asked for into view and select it; it may be sorted or
+  // filtered anywhere, so it is looked up in what is showing.
+  useEffect(() => {
+    if (!focus) return;
+    const i = view.indexOf(focus);
+    if (i < 0) return;
+    setActive(i);
+    // Measured from the DOM, not the virtualizer: a grid that has just mounted
+    // still carries its placeholder rect, and the details panel opening in the
+    // same commit shrinks it, so scrollToIndex would clamp to the top.
+    const el = scrollRef.current;
+    const body = el?.querySelector<HTMLElement>('.grid-inner > div:last-child');
+    if (el && body) {
+      const shown = el.clientHeight - body.offsetTop;
+      el.scrollTop = i * ROW_H - Math.max(0, (shown - ROW_H) / 2);
+    }
+    // Only a new row to focus should move the view, not every re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus]);
 
   const toggleSort = (key: string) =>
     setSort((s) => (s?.key !== key ? { key, dir: 1 } : s.dir === 1 ? { key, dir: -1 } : null));
@@ -235,11 +264,18 @@ export function Grid({
               return (
                 <div
                   key={vi.key}
-                  className={`grid-row${vi.index === active ? ' on' : ''}`}
+                  className={`grid-row${vi.index === active ? ' on' : ''}${marked?.has(r) ? ' marked' : ''}`}
                   style={{ transform: `translateY(${vi.start}px)`, height: ROW_H, width: totalW }}
                   onClick={() => {
                     setActive(vi.index);
                     onSelect(r);
+                  }}
+                  onContextMenu={(e) => {
+                    if (!onContext) return;
+                    e.preventDefault();
+                    setActive(vi.index);
+                    onSelect(r);
+                    onContext(r, e.clientX, e.clientY);
                   }}
                 >
                   <div className="cell idx" style={{ width: IDX_W }}>

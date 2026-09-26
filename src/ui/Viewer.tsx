@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Row } from '../core/types';
+import type { Column, Row } from '../core/types';
 import type { ParserInfo, WorkResult } from '../worker';
 import { Detail } from './Detail';
 import { bytes, download, toCsv, toJson } from './format';
@@ -30,6 +30,9 @@ export function Viewer({
   saved,
   onSaved,
   pane,
+  onAddToTimeline,
+  focus,
+  onTimeline,
 }: {
   result: WorkResult | undefined;
   /** An artifact has been asked for and is still being read. */
@@ -45,6 +48,12 @@ export function Viewer({
   onSaved: (next: SavedFilter[]) => void;
   /** Present when the main area is split: this pane's title bar. */
   pane?: { label: string; active: boolean; onClose: () => void };
+  /** Right-click → Add to timeline: the row, its columns, its table and its index among the artifact's rows. */
+  onAddToTimeline?: (row: Row, columns: Column[], table: string | null, rowIndex: number) => void;
+  /** A row to bring into view (by index among the artifact's rows); the nonce makes asking again move again. */
+  focus?: { index: number; nonce: number } | null;
+  /** Indexes of this artifact's rows already on the timeline. */
+  onTimeline?: Set<number>;
 }) {
   const [row, setRow] = useState<Row | null>(null);
   const [search, setSearch] = useState('');
@@ -63,6 +72,8 @@ export function Viewer({
   /** Bumped by every press of Run, so running the same text again re-runs it. */
   const [sigmaRuns, setSigmaRuns] = useState(0);
   const workspace = useRef<HTMLDivElement>(null);
+  const [menu, setMenu] = useState<{ row: Row; x: number; y: number } | null>(null);
+  const [focusRow, setFocusRow] = useState<Row | null>(null);
 
   // Another artifact (or the same one read as something else) starts from a
   // clean search. A running Sigma rule stays: that is what lets one rule be
@@ -97,6 +108,40 @@ export function Viewer({
     () => (table ? (result?.rows ?? []).filter((r) => r.table === table.id) : (result?.rows ?? [])),
     [table, result],
   );
+  // A row asked for (a timeline event's source): its table, no filters hiding
+  // it, selected and scrolled to.
+  const [focused, setFocused] = useState<number | null>(null);
+  if (focus && result?.rows && focus.nonce !== focused) {
+    setFocused(focus.nonce);
+    const r = result.rows[focus.index];
+    if (r) {
+      if (typeof r.table === 'string') setTableId(r.table);
+      setSearch('');
+      setColFilters({});
+      setAppliedSaved('');
+      setRow(r);
+      setFocusRow(r);
+    }
+  }
+  const marked = useMemo(
+    () => new Set([...(onTimeline ?? [])].map((i) => result?.rows?.[i]).filter((r): r is Row => !!r)),
+    [onTimeline, result],
+  );
+
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && setMenu(null);
+    window.addEventListener('click', close);
+    window.addEventListener('keydown', key);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('keydown', key);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [menu]);
+
   // Saved filters belong to a table, since column filters name its columns.
   const parserId = result?.parser ? result.parser.id + (table ? `/${table.id}` : '') : '';
 
@@ -410,6 +455,9 @@ export function Viewer({
               // truncated artifact.
               partial={result.warnings?.some((w) => /partial|cap |cancelled|truncat/i.test(w.message))}
               onSelect={setRow}
+              onContext={(r, x, y) => setMenu({ row: r, x, y })}
+              focus={focusRow}
+              marked={marked}
             />
             {row && (
               <>
@@ -433,6 +481,43 @@ export function Viewer({
               </>
             )}
           </div>
+
+          {menu && (
+            <div className="row-menu" role="menu" style={{ left: menu.x, top: menu.y }} onClick={(e) => e.stopPropagation()}>
+              {onAddToTimeline && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    onAddToTimeline(menu.row, columns, table?.label ?? null, result.rows?.indexOf(menu.row) ?? -1);
+                    setMenu(null);
+                  }}
+                >
+                  {marked.has(menu.row) ? 'Add to timeline again…' : 'Add to timeline…'}
+                </button>
+              )}
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setRow(menu.row);
+                  setMenu(null);
+                }}
+              >
+                Show details
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  navigator.clipboard?.writeText(toJson([menu.row])).catch(() => undefined);
+                  setMenu(null);
+                }}
+              >
+                Copy row as JSON
+              </button>
+            </div>
+          )}
         </>
       )}
     </>

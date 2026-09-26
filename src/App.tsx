@@ -3,6 +3,8 @@ import { Logo } from './ui/Logo';
 import { CasePanel } from './ui/CasePanel';
 import { ArtifactPanel } from './ui/ArtifactPanel';
 import { Viewer } from './ui/Viewer';
+import { AddEventDialog, TimelineView, type Pending } from './ui/TimelineView';
+import { EMPTY_TIMELINE, type Timeline, type TimelineEvent } from './ui/timeline';
 import {
   addToCase,
   artifactFile,
@@ -13,10 +15,12 @@ import {
   isPairedLog,
   listArtifacts,
   listCases,
+  loadTimeline,
   logsFor,
   pickedFiles,
   removeArtifacts,
   saveCase,
+  saveTimeline,
   setArtifactParser,
   storageUse,
   type CaseArtifact,
@@ -38,6 +42,7 @@ import {
   type DetailSizes,
   type SavedFilter,
 } from './ui/storage';
+import type { Column, Row } from './core/types';
 import type { ParserInfo, WorkRequest, WorkResult, WorkerReady } from './worker';
 
 let nextId = 1;
@@ -96,6 +101,14 @@ export default function App() {
   const [builderOpen, setBuilderOpen] = useState(() => read('builderOpen', true, isFlag));
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [saved, setSaved] = useState<SavedFilter[]>(() => read('savedFilters', [], isSavedList));
+
+  // The investigation timeline: kept with the case, or for this session only.
+  const [view, setView] = useState<'artifacts' | 'timeline'>('artifacts');
+  const [timeline, setTimelineState] = useState<Timeline>(EMPTY_TIMELINE);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [lastLane, setLastLane] = useState<string | null>(null);
+  /** A row to bring into view in whichever pane shows its artifact. */
+  const [focus, setFocus] = useState<{ key: string; index: number; nonce: number } | null>(null);
 
   // The file behind each result, so it can be read again as something else.
   // Some artifacts are a structure inside another: shell bags live in a
@@ -219,7 +232,7 @@ export default function App() {
     refreshStorage();
   }, [supported, refreshStorage]);
 
-  // The chosen case's artifacts, read from storage whenever the case changes.
+  // The chosen case's artifacts and timeline, read from storage whenever the case changes.
   useEffect(() => {
     write('activeCase', caseId);
     if (!caseId || !supported) return;
@@ -227,6 +240,9 @@ export default function App() {
     listArtifacts(caseId)
       .then((list) => live && setArtifacts(list))
       .catch(() => live && setArtifacts([]));
+    loadTimeline(caseId)
+      .then((t) => live && setTimelineState(t))
+      .catch(() => live && setTimelineState(EMPTY_TIMELINE));
     return () => {
       live = false;
     };
@@ -243,9 +259,19 @@ export default function App() {
     setActivePane(0);
     setArtifactResult({});
     setArtifacts([]);
+    setTimelineState(EMPTY_TIMELINE);
+    setFocus(null);
     setCaseError(null);
     setCaseId(id);
   }, []);
+
+  const setTimeline = useCallback(
+    (t: Timeline) => {
+      setTimelineState(t);
+      if (caseId) saveTimeline(caseId, t).catch((e: Error) => setCaseError(`The timeline could not be saved: ${e.message}`));
+    },
+    [caseId],
+  );
 
   /** Reads a stored artifact, with its transaction logs when it is a hive, into a pane. */
   const openArtifact = useCallback(
@@ -431,6 +457,21 @@ export default function App() {
   const activeId = panes[Math.min(activePane, panes.length - 1)].id;
   const activeKey = activeId === null ? null : (entries.find((e) => resultOf(e.key) === activeId)?.key ?? null);
 
+  /** The navigator key of a parse result: its case artifact's id, or "r<id>" in a session. */
+  const keyOfResult = useCallback(
+    (id: number): string | null => {
+      if (!caseId) return `r${id}`;
+      for (const [k, v] of Object.entries(artifactResult)) if (v === id) return k;
+      return null;
+    },
+    [caseId, artifactResult],
+  );
+  const timelineRows = useMemo(() => {
+    const m = new Map<string, Set<number>>();
+    for (const e of timeline.events) m.set(e.source.key, (m.get(e.source.key) ?? new Set<number>()).add(e.source.rowIndex));
+    return m;
+  }, [timeline]);
+
   const openEntry = useCallback(
     (e: Entry, beside: boolean) => {
       if (caseId) {
@@ -447,6 +488,29 @@ export default function App() {
     },
     [artifacts, removeArtifact],
   );
+
+  const addToTimeline = (result: WorkResult, row: Row, columns: Column[], table: string | null, rowIndex: number) => {
+    const key = keyOfResult(result.id);
+    if (!key || rowIndex < 0) return;
+    const entry = entries.find((x) => x.key === key);
+    setPending({
+      row,
+      columns,
+      source: { key, fileName: result.fileName, path: entry?.path ?? result.fileName, parser: result.parser?.name ?? '', table, rowIndex },
+    });
+  };
+  const openSource = (e: TimelineEvent) => {
+    const entry = entries.find((x) => x.key === e.source.key);
+    if (!entry) {
+      setCaseError(
+        `${e.source.path || e.source.fileName} is no longer ${caseId ? 'in this case' : 'open in this session'}, so the event cannot be opened at its source.`,
+      );
+      return;
+    }
+    setView('artifacts');
+    openEntry(entry, false);
+    setFocus({ key: e.source.key, index: e.source.rowIndex, nonce: Date.now() });
+  };
 
   const describe = (e: Entry) => {
     const rid = resultOf(e.key);
@@ -533,6 +597,14 @@ export default function App() {
             </h1>
             <p className="tagline">Artifact forensics in your browser · every byte is parsed in this tab, nothing is uploaded</p>
           </div>
+        </div>
+        <div className="segmented view-switch" role="radiogroup" aria-label="View">
+          <button type="button" role="radio" aria-checked={view === 'artifacts'} className={view === 'artifacts' ? 'on' : ''} onClick={() => setView('artifacts')}>
+            Artifacts
+          </button>
+          <button type="button" role="radio" aria-checked={view === 'timeline'} className={view === 'timeline' ? 'on' : ''} onClick={() => setView('timeline')}>
+            Timeline{timeline.events.length ? ` (${timeline.events.length})` : ''}
+          </button>
         </div>
         <span className="spacer" />
         <div className="settings">
@@ -683,7 +755,24 @@ export default function App() {
           )}
         </aside>
 
-        <main className={`panes${splitView ? ' split' : ''}`} ref={mainArea}>
+        {view === 'timeline' && (
+          <main>
+            <TimelineView
+              timeline={timeline}
+              onChange={setTimeline}
+              onOpenSource={openSource}
+              persisted={!!caseId}
+              report={{
+                caseName: activeCase?.name ?? '',
+                customer: activeCase?.customer ?? '',
+                reference: activeCase?.reference ?? '',
+                examiner: activeCase?.examiner ?? '',
+                notes: activeCase?.notes ?? '',
+              }}
+            />
+          </main>
+        )}
+        <main className={`panes${splitView ? ' split' : ''}`} ref={mainArea} hidden={view !== 'artifacts'}>
           {panes.map((p, i) => {
             const result = p.id === null ? undefined : resultById.get(p.id);
             const label = result?.fileName ?? (p.id !== null ? 'Reading…' : 'Empty pane');
@@ -726,6 +815,9 @@ export default function App() {
                     saved={saved}
                     onSaved={onSaved}
                     pane={splitView ? { label: `${i === 0 ? 'L' : 'R'} · ${label}`, active: i === activePane, onClose: () => closePane(i) } : undefined}
+                    onAddToTimeline={result ? (row, columns, table, rowIndex) => addToTimeline(result, row, columns, table, rowIndex) : undefined}
+                    focus={result && focus && keyOfResult(result.id) === focus.key ? { index: focus.index, nonce: focus.nonce } : null}
+                    onTimeline={result ? timelineRows.get(keyOfResult(result.id) ?? '') : undefined}
                   />
                 </section>
               </Fragment>
@@ -733,6 +825,20 @@ export default function App() {
           })}
         </main>
       </div>
+
+      {pending && (
+        <AddEventDialog
+          pending={pending}
+          timeline={timeline}
+          lastLane={lastLane}
+          onCancel={() => setPending(null)}
+          onAdd={(e) => {
+            setTimeline({ lanes: timeline.lanes.includes(e.lane) ? timeline.lanes : [...timeline.lanes, e.lane], events: [...timeline.events, e] });
+            setLastLane(e.lane);
+            setPending(null);
+          }}
+        />
+      )}
     </div>
   );
 }

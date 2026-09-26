@@ -12,7 +12,9 @@
  *   cases/index.json                 the cases
  *   cases/<caseId>/artifacts.json    that case's artifacts
  *   cases/<caseId>/files/<id>        each artifact's bytes, byte for byte
+ *   cases/<caseId>/timeline.json     the investigation timeline
  */
+import { EMPTY_TIMELINE, isTimeline, type Timeline } from './timeline';
 
 export interface CaseInfo {
   id: string;
@@ -191,6 +193,17 @@ export async function deleteCase(id: string): Promise<CaseInfo[]> {
   await dir.removeEntry(id, { recursive: true }).catch(() => undefined);
   await writeJson(dir, 'index.json', list);
   return list;
+}
+
+/** The case's investigation timeline, kept beside its artifacts. */
+export async function loadTimeline(caseId: string): Promise<Timeline> {
+  const dir = await (await casesDir()).getDirectoryHandle(caseId, { create: true });
+  return readJson(dir, 'timeline.json', isTimeline, EMPTY_TIMELINE);
+}
+
+export async function saveTimeline(caseId: string, t: Timeline): Promise<void> {
+  const dir = await (await casesDir()).getDirectoryHandle(caseId, { create: true });
+  await writeJson(dir, 'timeline.json', t);
 }
 
 export async function listArtifacts(caseId: string): Promise<CaseArtifact[]> {

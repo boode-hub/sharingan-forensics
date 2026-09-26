@@ -1539,3 +1539,322 @@ button.primary {
   font: 11.5px/1.6 var(--mono);
   color: var(--text);
 }
+
+/* A row already on the timeline. */
+.grid-row.marked .cell.idx {
+  color: var(--accent);
+  box-shadow: inset 3px 0 var(--accent);
+}
+
+/* ---------------------------------------------------------------- menus -- */
+
+.row-menu {
+  position: fixed;
+  z-index: 70;
+  min-width: 190px;
+  padding: 4px;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.row-menu button {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.row-menu button:hover,
+.row-menu button:focus-visible {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.view-switch {
+  margin-left: 24px;
+}
+
+/* -------------------------------------------------------------- dialogs -- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--bg-deep) 70%, transparent);
+}
+.modal {
+  width: min(560px, 94vw);
+  max-height: 90vh;
+  overflow: auto;
+  padding: 18px 20px;
+  background: var(--bg-base);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+.modal h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+.modal .from,
+.tl-detail .from {
+  margin: 0 0 12px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+.modal label,
+.tl-detail label {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.modal input,
+.modal select,
+.modal textarea,
+.tl-detail input,
+.tl-detail textarea {
+  padding: 6px 8px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 12.5px;
+}
+.modal input.bad {
+  border-color: var(--red);
+}
+.modal .row2 {
+  display: flex;
+  gap: 6px;
+}
+.modal .row2 input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+}
+.modal .actions,
+.tl-detail .actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.modal .actions button,
+.tl-detail .actions button {
+  padding: 6px 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+/* ------------------------------------------------------------- timeline -- */
+
+.timeline-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.timeline-page .toolbar select {
+  padding: 5px 6px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+}
+.tl-title {
+  font-size: 14px;
+}
+.tl-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.tl-body > .empty {
+  max-width: 460px;
+}
+.tl-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 0 12px 24px;
+}
+.tl-lanes {
+  display: grid;
+  align-items: stretch;
+}
+.tl-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 10px 8px 8px;
+  background: var(--bg-deep);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+}
+.tl-head.lane-name {
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+.tl-day {
+  padding: 14px 8px 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  border-bottom: 1px dashed var(--border-light);
+}
+.tl-time {
+  padding: 10px 8px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+.tl-time .gap {
+  display: block;
+  color: var(--accent);
+  font-size: 10.5px;
+}
+/* Each lane is a vertical line; an event is a dot on it with a branch to its card. */
+.tl-cell {
+  position: relative;
+  padding: 6px 8px 6px 34px;
+}
+.tl-cell::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 14px;
+  border-left: 2px solid var(--border);
+}
+.tl-cell.has::after {
+  content: '';
+  position: absolute;
+  top: 20px;
+  left: 9px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-deep);
+}
+.tl-cell.has .tl-card::before {
+  content: '';
+  position: absolute;
+  top: 19px;
+  left: -14px;
+  width: 14px;
+  border-top: 2px solid var(--accent-border);
+}
+.tl-card {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.tl-card:hover {
+  border-color: var(--accent-border);
+}
+.tl-card.on {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+.tl-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.tl-top .tag {
+  flex: none;
+  padding: 0 7px;
+  border: 1px solid var(--accent-border);
+  border-radius: 10px;
+  color: var(--accent);
+  font-size: 10.5px;
+}
+.tl-top .src {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+.tl-label {
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.tl-note {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  white-space: pre-wrap;
+}
+.tl-detail {
+  width: 380px;
+  flex: none;
+  overflow: auto;
+  padding: 12px 14px;
+  border-left: 1px solid var(--border);
+  background: var(--bg-base);
+}
+.tl-detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.tl-fields {
+  width: 100%;
+  margin-top: 12px;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+.tl-fields th,
+.tl-fields td {
+  padding: 3px 6px;
+  text-align: left;
+  vertical-align: top;
+  border-top: 1px solid var(--border-light);
+}
+.tl-fields th {
+  color: var(--text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.tl-fields td {
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+
+main[hidden] {
+  display: none;
+}
+.modal .actions button.primary,
+.tl-detail .actions button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}

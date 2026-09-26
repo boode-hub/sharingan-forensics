@@ -311,5 +311,11 @@ export async function replayIfDirty(source: Reader, ctx: Ctx): Promise<Reader> {
       }
     }
   }
-  return reader;
+  // A hive is read by jumping from cell to cell, a value at a time; from a
+  // file that is one read per cell, which made a 45 MB hive take minutes
+  // against two seconds in memory. His Registry library holds the whole hive
+  // too, and hives are bounded (hundreds of MB, not the gigabytes of an
+  // event log), so it is read once here.
+  // ponytail: whole hive in memory; a cached page reader if multi-GB hives turn up.
+  return reader === source ? bufReader(await source.bytes(0, source.size), source.name) : reader;
 }

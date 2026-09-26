@@ -127,7 +127,8 @@ colour, per-table tabs, CSV/JSON export.
 4. **SQLite family**: SQLECmd done (`src/parsers/sqlite.ts`, sql.js with
    the WASM inlined, maps from `scripts/gen-sqlmaps.mjs`, `-wal` applied).
    WxTCmd done (`src/parsers/wxtcmd.ts`, same engine via `openSqlite`).
-5. **ESE family**: SrumECmd, SumECmd — a handwritten ESE page/table parser.
+5. **ESE family**: SrumECmd done (`src/core/ese.ts` + `src/parsers/srum.ts`,
+   ESE checked against esent via PowerShell ManagedEsent). Next SumECmd.
 6. **SDB Explorer**, **bstrings**, **Hasher** (SubtleCrypto has no MD5:
    port one), **iisGeolocate** (user-supplied MaxMind file, no network).
 7. **Super-timeline** across all loaded artifacts (SPEC P6).

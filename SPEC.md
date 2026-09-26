@@ -74,7 +74,7 @@ for a browser).
 | MFTECmd | `$MFT`, `$J`, `$Boot`, `$SDS`, `$I30` (he does not parse `$LogFile`) | P4 | **done** |
 | SQLECmd | SQLite + map files | P5 | **done** — all 93 of his maps; `-wal` applied |
 | WxTCmd | `ActivitiesCache.db` | P5 | **done** |
-| SrumECmd | `SRUDB.dat` (ESE) | P5 | todo |
+| SrumECmd | `SRUDB.dat` (ESE) | P5 | **done** — ESE reader in `src/core/ese.ts`; SOFTWARE hive paired for names |
 | SumECmd | SUM `.mdb` (ESE) | P5 | todo |
 | SDB Explorer | Shim databases `.sdb` | P6 | todo |
 | bstrings | Strings from any file | P6 | todo |

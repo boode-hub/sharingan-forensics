@@ -184,3 +184,67 @@ export function unwrapMam(buf: Uint8Array): Uint8Array {
   }
   return xpressHuffmanDecompress(body, size);
 }
+
+/**
+ * Plain LZ77 Xpress ([MS-XCA] 2.4, "LZXPRESS"), which ESE uses for columns
+ * over 1 KiB: a 32-bit flag word before every 32 tokens, a set bit meaning a
+ * 16-bit match token (offset in the high 13 bits, length in the low 3) and a
+ * clear bit a literal byte. Lengths that do not fit spill into a shared
+ * half-byte, then a byte, then 16 and 32 bits.
+ */
+export function xpressDecompress(input: Uint8Array, outputSize: number): Uint8Array {
+  const out = new Uint8Array(outputSize);
+  const dv = new DataView(input.buffer, input.byteOffset, input.byteLength);
+  let inPos = 0;
+  let outPos = 0;
+  let flags = 0;
+  let flagCount = 0;
+  let halfByte = 0;
+  while (outPos < outputSize) {
+    if (flagCount === 0) {
+      if (inPos + 4 > input.length) break;
+      flags = dv.getUint32(inPos, true);
+      inPos += 4;
+      flagCount = 32;
+    }
+    flagCount--;
+    if ((flags & (1 << flagCount)) === 0) {
+      if (inPos >= input.length) break;
+      out[outPos++] = input[inPos++];
+      continue;
+    }
+    if (inPos + 2 > input.length) break;
+    const token = dv.getUint16(inPos, true);
+    inPos += 2;
+    let length = token & 7;
+    const offset = (token >> 3) + 1;
+    if (length === 7) {
+      if (halfByte === 0) {
+        length = input[inPos] & 15;
+        halfByte = inPos++;
+      } else {
+        length = input[halfByte] >> 4;
+        halfByte = 0;
+      }
+      if (length === 15) {
+        length = input[inPos++];
+        if (length === 255) {
+          length = dv.getUint16(inPos, true);
+          inPos += 2;
+          if (length === 0) {
+            length = dv.getUint32(inPos, true);
+            inPos += 4;
+          }
+          if (length < 15 + 7) throw new XpressError('match length below its encoding minimum');
+          length -= 15 + 7;
+        }
+        length += 15;
+      }
+      length += 7;
+    }
+    length += 3;
+    if (offset > outPos) throw new XpressError('match reaches before the start of the output');
+    for (let i = 0; i < length && outPos < outputSize; i++, outPos++) out[outPos] = out[outPos - offset];
+  }
+  return out.subarray(0, outPos);
+}

@@ -1,0 +1,4 @@
+{
+  "_comment": "make.ps1 is the script that writes SRUDB.dat through esent; it is not an artifact.",
+  "reject": ["make.ps1"]
+}

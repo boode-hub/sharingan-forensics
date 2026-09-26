@@ -108,10 +108,24 @@ export function mftFor<T extends { path: string }>(journal: T, all: T[]): T | nu
   return mfts.find((m) => dirName(m.path) === root) ?? (mfts.length === 1 ? mfts[0] : null);
 }
 
-/** Everything an artifact is read with: a hive's transaction logs, a journal's $MFT. */
+/**
+ * The SOFTWARE hive a SRUDB.dat takes user and network names from, as
+ * SrumECmd's -r does: the one in the same Windows\System32 (KAPE keeps
+ * "C/Windows/System32/sru/SRUDB.dat" beside "C/Windows/System32/config/SOFTWARE"),
+ * one in the same folder, or the only one there is.
+ */
+export function softwareFor<T extends { path: string }>(db: T, all: T[]): T | null {
+  if (baseName(db.path).toLowerCase() !== 'srudb.dat') return null;
+  const hives = all.filter((a) => baseName(a.path).toLowerCase() === 'software');
+  const dir = dirName(db.path).toLowerCase();
+  const config = dir.replace(/(^|[\\/])sru$/, '$1config');
+  const inDir = (d: string) => hives.find((h) => dirName(h.path).toLowerCase() === d);
+  return inDir(config) ?? inDir(dir) ?? (hives.length === 1 ? hives[0] : null);
+}
+
+/** Everything an artifact is read with: a hive's transaction logs, a journal's $MFT, SRUM's SOFTWARE hive. */
 export function companionsFor<T extends { path: string }>(a: T, all: T[]): T[] {
-  const mft = mftFor(a, all);
-  return mft ? [...logsFor(a, all), mft] : logsFor(a, all);
+  return [...logsFor(a, all), mftFor(a, all), softwareFor(a, all)].filter((x): x is T => x !== null);
 }
 
 /** OPFS needs a secure context and a browser that can write files from the page. */

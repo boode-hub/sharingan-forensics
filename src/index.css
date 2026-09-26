@@ -612,6 +612,279 @@ main {
   display: flex;
   flex-direction: column;
 }
+/* The main area holds one pane, or two side by side with a bar between them. */
+main.panes {
+  flex-direction: row;
+}
+.pane {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+main.split .pane {
+  flex-grow: 0;
+  flex-shrink: 1;
+  outline: 1px solid transparent;
+  outline-offset: -1px;
+}
+main.split .pane.active {
+  outline-color: var(--accent-border);
+}
+.pane-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: var(--bg-deep);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+.pane-bar.on {
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+.pane-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+}
+.pane-close,
+.nav-count .link,
+.tree-actions button,
+.folder-row,
+.files .beside {
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.pane-close {
+  padding: 0 6px;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+}
+.pane-close:hover {
+  color: var(--red);
+}
+.pane-divider {
+  flex: none;
+  width: 5px;
+  cursor: col-resize;
+  background: var(--border);
+  transition: background var(--transition);
+}
+.pane-divider:hover,
+.pane-divider.dragging {
+  background: var(--accent);
+}
+
+/* ------------------------------------------------------------- navigator -- */
+
+.navigator {
+  margin-top: 12px;
+}
+.nav-filter input {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 12px;
+}
+.nav-filter input:focus {
+  border-color: var(--accent-border);
+  outline: none;
+}
+.nav-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 11.5px;
+}
+.nav-controls select {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 4px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 11.5px;
+}
+.nav-controls .segmented button {
+  padding: 3px 7px;
+  font-size: 11px;
+}
+.nav-controls .check {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.tree-actions button {
+  padding: 0 6px;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+}
+.nav-count {
+  display: flex;
+  justify-content: space-between;
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.nav-count .link {
+  color: var(--text-secondary);
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+.nav-count .link:hover {
+  color: var(--accent);
+}
+.navigator .files {
+  margin-top: 6px;
+}
+.navigator .files.nested {
+  margin: 0;
+  border-left: 1px solid var(--border-light);
+}
+.navigator .folder-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.navigator .folder-row .caret {
+  width: 10px;
+  color: var(--text-muted);
+}
+.navigator .folder-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.navigator .count {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-family: var(--mono);
+}
+.navigator .group summary {
+  margin-top: 8px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.panes-badge {
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 9.5px;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+.files .beside {
+  flex: none;
+  width: 24px;
+  padding: 6px 0;
+  text-align: center;
+  color: var(--text-muted);
+  opacity: 0;
+}
+.files li.artifact:hover .beside,
+.files .beside:focus-visible {
+  opacity: 1;
+}
+.files .beside:hover {
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+
+/* Ctrl+K: jump to any artifact by typing part of its path. */
+.switcher-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  justify-items: center;
+  align-items: start;
+  padding-top: 12vh;
+  background: color-mix(in srgb, var(--bg-deep) 70%, transparent);
+}
+.switcher {
+  width: min(640px, 92vw);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-base);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+.switcher input {
+  padding: 12px 14px;
+  background: var(--bg-deep);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+}
+.switcher ul {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  overflow: auto;
+}
+.switcher li button {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 10px;
+  text-align: left;
+  border-radius: var(--radius-sm);
+}
+.switcher li button.on {
+  background: var(--accent-bg);
+}
+.switcher .fn {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--text);
+}
+.switcher .dir {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.switcher .kind {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.switcher .none {
+  padding: 10px;
+  color: var(--text-muted);
+}
 
 .empty {
   margin: auto;

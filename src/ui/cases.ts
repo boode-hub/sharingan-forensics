@@ -199,26 +199,49 @@ export interface Incoming {
  * Copies files into a case. Each file is streamed to disk, so a multi-gigabyte
  * log never has to fit in memory. Stops at the first file that cannot be
  * stored (usually a full disk) and returns what was stored and why it stopped.
+ *
+ * Cancelling (the signal) stops the copy mid-file and removes everything this
+ * call had copied, so the case is left as it was before.
  */
 export async function addToCase(
   caseId: string,
   incoming: Incoming[],
   detect: (file: File) => Promise<string | null>,
   onProgress?: (done: number, total: number) => void,
-): Promise<{ added: CaseArtifact[]; all: CaseArtifact[]; error: string | null }> {
+  signal?: AbortSignal,
+): Promise<{ added: CaseArtifact[]; all: CaseArtifact[]; error: string | null; cancelled: boolean }> {
   const caseDir = await (await casesDir()).getDirectoryHandle(caseId, { create: true });
   const files = await caseDir.getDirectoryHandle('files', { create: true });
-  const all = await readJson(caseDir, 'artifacts.json', isArtifactList, []);
+  const before = await readJson(caseDir, 'artifacts.json', isArtifactList, []);
+  const all = [...before];
   const added: CaseArtifact[] = [];
   const total = incoming.reduce((n, f) => n + f.file.size, 0);
   let done = 0;
   let error: string | null = null;
+  // Progress moves within a file too, at most ten times a second.
+  let reported = 0;
+  const report = (n: number) => {
+    const now = performance.now();
+    if (now - reported > 100 || n === total) {
+      reported = now;
+      onProgress?.(n, total);
+    }
+  };
 
   for (const { file, path } of incoming) {
+    if (signal?.aborted) break;
     const id = crypto.randomUUID();
     try {
       const w = await (await files.getFileHandle(id, { create: true })).createWritable();
-      await file.stream().pipeTo(w);
+      let copied = 0;
+      const count = new TransformStream<Uint8Array, Uint8Array>({
+        transform(chunk, c) {
+          copied += chunk.byteLength;
+          report(done + copied);
+          c.enqueue(chunk);
+        },
+      });
+      await file.stream().pipeThrough(count).pipeTo(w, { signal });
       const artifact: CaseArtifact = {
         id,
         path,
@@ -232,6 +255,7 @@ export async function addToCase(
       added.push(artifact);
     } catch (e) {
       await files.removeEntry(id).catch(() => undefined);
+      if (signal?.aborted) break;
       error = `${path} could not be stored: ${(e as Error).message}`;
       break;
     }
@@ -240,8 +264,13 @@ export async function addToCase(
     // Keep the list on disk current, so an interrupted import keeps what it copied.
     if (added.length % 50 === 0) await saveArtifacts(caseId, all);
   }
+  if (signal?.aborted) {
+    for (const a of added) await files.removeEntry(a.id).catch(() => undefined);
+    await saveArtifacts(caseId, before);
+    return { added: [], all: before, error: null, cancelled: true };
+  }
   await saveArtifacts(caseId, all);
-  return { added, all, error };
+  return { added, all, error, cancelled: false };
 }
 
 /** The stored copy of an artifact, as a File the parsers can read. */

@@ -74,6 +74,8 @@ export default function App() {
   const [artifactResult, setArtifactResult] = useState<Record<string, number>>({});
   const [importing, setImporting] = useState<{ done: number; total: number } | null>(null);
   const [caseError, setCaseError] = useState<string | null>(null);
+  const [importNote, setImportNote] = useState<string | null>(null);
+  const importAbort = useRef<AbortController | null>(null);
   const [storage, setStorage] = useState<{ used: number; quota: number; persisted: boolean } | null>(null);
   const pendingDetect = useRef(new Map<number, (parserId: string | null) => void>());
 
@@ -318,13 +320,22 @@ export default function App() {
         return;
       }
       setCaseError(null);
+      setImportNote(null);
       setImporting({ done: 0, total: incoming.reduce((n, i) => n + i.file.size, 0) });
-      const { added, all, error } = await addToCase(caseId, incoming, detectFile, (done, total) =>
-        setImporting({ done, total }),
-      ).catch((e: Error) => ({ added: [], all: artifacts, error: e.message }));
+      const abort = new AbortController();
+      importAbort.current = abort;
+      const { added, all, error, cancelled } = await addToCase(
+        caseId,
+        incoming,
+        detectFile,
+        (done, total) => setImporting({ done, total }),
+        abort.signal,
+      ).catch((e: Error) => ({ added: [], all: artifacts, error: e.message, cancelled: false }));
+      importAbort.current = null;
       setImporting(null);
       setArtifacts(all);
       if (error) setCaseError(error);
+      if (cancelled) setImportNote('Upload cancelled. Nothing from it was kept in the case.');
       refreshStorage();
       // Open the first recognised one; a whole collection is opened one
       // artifact at a time, as the analyst picks them.
@@ -650,8 +661,16 @@ export default function App() {
           </div>
 
           {importing && (
-            <p className="busy">
+            <p className="busy importing">
               Copying into the case… {bytes(importing.done)} of {bytes(importing.total)}
+              <button type="button" className="cancel" onClick={() => importAbort.current?.abort()}>
+                Cancel
+              </button>
+            </p>
+          )}
+          {importNote && !importing && (
+            <p className="busy" role="status">
+              {importNote}
             </p>
           )}
           {caseError && (

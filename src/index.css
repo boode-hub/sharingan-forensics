@@ -481,6 +481,25 @@ aside {
   color: var(--text-secondary);
   font-size: 12px;
 }
+.busy.importing {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.busy .cancel {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 12px;
+}
+.busy .cancel:hover {
+  color: var(--red);
+  background: var(--red-bg);
+  border-color: var(--red);
+}
 .hint code {
   font-family: var(--mono);
   color: var(--text);
